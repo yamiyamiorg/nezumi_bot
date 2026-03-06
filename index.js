@@ -147,9 +147,9 @@ client.on('interactionCreate', async (interaction) => {
     if (!interaction.isChatInputCommand()) return;
 
     // --- 1枚引き (/tarot) ---
-    if (interaction.commandName === 'tarot') {
-        // 「考え中...」の状態にする（画像処理に時間がかかるため）
-        await interaction.deferReply();
+	if (interaction.commandName === 'tarot') {
+    	// 💡 ephemeral: true を追加
+    		await interaction.deferReply({ ephemeral: true });
 
         const selectedCard = tarotCards[Math.floor(Math.random() * tarotCards.length)];
         const isReversed = Math.random() < 0.5;
@@ -167,16 +167,17 @@ client.on('interactionCreate', async (interaction) => {
             // 画像が正常に処理できた場合、Embedに設定
             embed.setImage(`attachment://${imageAttachment.name}`); // 添付ファイルを指定する特殊な書き方
             // 添付ファイルと一緒に返信する
-            await interaction.editReply({ embeds: [embed], files: [imageAttachment] });
+            await interaction.editReply({ embeds: [embed], files: [imageAttachment] ,ephemeral: true});
         } else {
             // エラー時は文字だけで返信
-            await interaction.editReply({ embeds: [embed], content: '画像の読み込みに失敗しました。' });
+            await interaction.editReply({ embeds: [embed], content: '画像の読み込みに失敗しました。',ephemeral: true });
         }
     }
 
 	// --- 3枚引き (/tarot3) ---
 	else if (interaction.commandName === 'tarot3') {
-    	await interaction.deferReply();
+    	// 💡 ここも ephemeral: true にする
+    	await interaction.deferReply({ ephemeral: true });
 	
     	let deck = [...tarotCards];
     	const positions = ['過去 🕰️', '現在 📍', '未来 🚀'];
@@ -199,9 +200,9 @@ client.on('interactionCreate', async (interaction) => {
 	
         	if (imageAttachment) {
             	embed.setImage(`attachment://${imageAttachment.name}`);
-            	await interaction.followUp({ embeds: [embed], files: [imageAttachment] });
+            	await interaction.followUp({ embeds: [embed], files: [imageAttachment] ,ephemeral: true});
         	} else {
-            	await interaction.followUp({ embeds: [embed], content: '画像の読み込みに失敗しました。' });
+            	await interaction.followUp({ embeds: [embed], content: '画像の読み込みに失敗しました。',ephemeral: true });
         	}
     	}
 	
@@ -214,7 +215,7 @@ client.on('interactionCreate', async (interaction) => {
         	.setDescription(storyResult.message)
         	.setFooter({ text: 'タロットはあなたの可能性を示しています。' });
 	
-    	await interaction.followUp({ embeds: [storyEmbed] });
+    	await interaction.followUp({ embeds: [storyEmbed] ,ephemeral: true});
 }});
 // ここに先ほどコピーした「トークン」を貼り付けます
 client.login(process.env.DISCORD_TOKEN);

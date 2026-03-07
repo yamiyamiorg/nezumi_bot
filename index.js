@@ -30,6 +30,8 @@ const tarotCards = [
     { name: 'XXI. 世界', tone: 'positive', upright: '完成、成功、完璧', reversed: '未完成、中途半端、スランプ', image: '21_World.jpg' }
 ];
 
+
+//********************************************************************タロット*************************************************************************************************************
 // --- [追加] 画像をダウンロードして、必要なら反転させる関数 ---
 async function getCardImage(imageFileName, isReversed) {
     try {
@@ -69,8 +71,7 @@ function calculateScore(card, isReversed) {
         return 0; // 中立
     }
 }
-
-// 2. メインの診断ロジック
+//* 2. メインの診断ロジック
 function generateTarotStory(past, present, future) {
     // 各カードのスコアを算出
     const s1 = calculateScore(past.card, past.isReversed);
@@ -108,6 +109,28 @@ function generateTarotStory(past, present, future) {
     return { storyType, totalScore, message };
 }// --------------------------------------------------------
 
+//**********************************************************************************************ヒットアンドブロー********************************************************************************************** */
+
+function generateAnswer() {
+    const digits = ['0','1','2','3','4','5','6','7','8','9'];
+    let res = "";
+    for(let i=0; i<4; i++) {
+        const idx = Math.floor(Math.random() * digits.length);
+        res += digits.splice(idx, 1)[0];
+    }
+    return res;
+}
+
+function checkHitAndBlow(ans, gus) {
+    let hit = 0, blow = 0;
+    for(let i=0; i<4; i++) {
+        if (gus[i] === ans[i]) hit++;
+        else if (ans.includes(gus[i])) blow++;
+    }
+    return { hit, blow };
+}
+
+
 // Botのインスタンスを作成
 const client = new Client({
 	intents: [
@@ -117,6 +140,7 @@ const client = new Client({
 	],
 });
 
+//****************************************************************************************コマンド処理・開始処理****************************************************************************************** */
 // 1. ログイン確認用のコードを追加（client.onの上に入れる）
 client.once('clientReady', async (c) => {
     console.log(`${c.user.tag} (ねずみタロット) がログインしました！🔮`);
@@ -124,10 +148,20 @@ client.once('clientReady', async (c) => {
     const data = [
         { name: 'tarot', description: 'タロットカードを1枚引きます' },
         { name: 'tarot3', description: '3枚のカードで過去・現在・未来を占います' },
+        {
+        name: 'hitandblow',
+        description: '4桁の数字当てゲームに挑戦！',
+        options: [{
+            name: 'guess',
+            type: 3, // STRING型
+            description: '4桁の数字を入力（例: 1234）',
+            required: true,
+        }]
+    },
     ];
 
     // 1. 拠点となるサーバーのIDを指定（ここにコピーしたIDを貼り付け）
-    const guildId = '1450709451488100396'; 
+    const guildId = ['1450709451488100396',1455097564759330958]; 
     const guild = client.guilds.cache.get(guildId);
 
     if (guild) {
@@ -142,6 +176,8 @@ client.once('clientReady', async (c) => {
         console.error('指定されたギルドが見つかりません。IDを確認してください。');
     }
 });
+
+//*******************************************************************************************メイン関数***************************************************************************************** */
 // 2. メッセージ反応部分（全角スペースを除去し、構造を整理）
 client.on('interactionCreate', async (interaction) => {
     if (!interaction.isChatInputCommand()) return;
@@ -216,6 +252,33 @@ client.on('interactionCreate', async (interaction) => {
         	.setFooter({ text: 'タロットはあなたの可能性を示しています。' });
 	
     	await interaction.followUp({ embeds: [storyEmbed] ,ephemeral: true});
-}});
+
+        
+    }
+
+    else if (interaction.commandName === 'hitandblow') {
+    await interaction.deferReply({ ephemeral: true });
+
+    const guess = interaction.options.getString('guess');
+    
+    // 💡 本来はサーバーごとに正解を保持すべきですが、
+    // まずは「実行するたびに正解が変わる1回勝負モード」で作ってみます。
+    const answer = generateAnswer(); 
+    const result = checkHitAndBlow(answer, guess);
+
+    const embed = new EmbedBuilder()
+        .setColor(result.hit === 4 ? 0xFFD700 : 0x0099FF)
+        .setTitle('🔢 ヒットアンドブローの結果')
+        .setDescription(`あなたの予想: **${guess}**`)
+        .addFields(
+            { name: '結果', value: `**${result.hit}** Hit / **${result.blow}** Blow`, inline: true },
+            { name: '判定', value: result.hit === 4 ? '🎉 チーズの匂いがする！' : '何も落ちてないみたい...' }
+        )
+        .setFooter({ text: '※1回ごとに正解が変わるモードです。' });
+
+    await interaction.editReply({ embeds: [embed] ,ephemeral: true });
+    }
+
+});
 // ここに先ほどコピーした「トークン」を貼り付けます
 client.login(process.env.DISCORD_TOKEN);

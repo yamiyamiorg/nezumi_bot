@@ -525,50 +525,64 @@ if (['mouse', 'rat', 'nezumi'].includes(interaction.commandName)) {
     }
 }
 else if (interaction.commandName === 'quiz') {
-    await interaction.deferReply({ephemeral: true}); // クイズは全員に見えるように ephemeral は無しがおすすめ
+    await interaction.deferReply({ ephemeral: true });
 
-    // mouse, rat, not_mouse の全リストからランダムに1つ選ぶ
+    // 1. 画像をランダムに選ぶ
     const categories = ['mouse', 'rat', 'not_mouse'];
     const category = categories[Math.floor(Math.random() * categories.length)];
     const chosen = extraImages[category][Math.floor(Math.random() * extraImages[category].length)];
-    
-    // 正解の判定
     const isNezumi = (category === 'mouse' || category === 'rat');
 
+    // 2. 軽量化した画像を準備
     const attachment = await getJokeImage(chosen.file);
     if (!attachment) return interaction.editReply('画像がお散歩中で見つからないちゅ…。');
 
     const embed = new EmbedBuilder()
         .setColor(0xFFA500)
         .setTitle('❓ ねずみクイズ！')
-        .setDescription('この画像の子は「ねずみ」かな？\n下のリアクションで答えてね！\n\n🐭：ねずみだちゅ！\n❌：ねずみじゃないちゅ！')
+        .setDescription('この画像の子は「ねずみ」かな？\n下のボタン（リアクション）で答えてね！')
         .setImage(`attachment://${attachment.name}`);
 
-    const message = await interaction.editReply({ embeds: [embed], files: [attachment], fetchReply: true });
+    // 3. メッセージを送信
+    const message = await interaction.editReply({ 
+        embeds: [embed], 
+        files: [attachment], 
+        fetchReply: true 
+    });
 
-    // リアクションを付ける
-    await message.react('🐭');
-    await message.react('❌');
+    // 💡 [ここがポイント] Bot自身が先にリアクションを付ける
+    try {
+        await message.react('🐭');
+        await message.react('❌');
+    } catch (error) {
+        console.error('リアクションの付与に失敗したちゅ…:', error);
+    }
 
-    // ユーザーの反応を待つ（30秒間）
+    // 4. ユーザーの回答を待つ（コレクター）
     const filter = (reaction, user) => {
         return ['🐭', '❌'].includes(reaction.emoji.name) && user.id === interaction.user.id;
     };
 
-    message.awaitReactions({ filter, max: 1, time: 30000, errors: ['time'] })
-        .then(collected => {
-            const reaction = collected.first();
-            const userChoice = (reaction.emoji.name === '🐭'); // ユーザーがネズミと判断したか
+    const collector = message.createReactionCollector({ filter, max: 1, time: 30000 });
 
-            if (userChoice === isNezumi) {
-                interaction.followUp({ content: `✨ 正解！この子は **${chosen.name}** だよ！正解だちゅ！`, ephemeral: true });
-            } else {
-                interaction.followUp({ content: `知ってた？実はこの子、 **${chosen.name}** なんだよ。残念、不正解だちゅ！`, ephemeral: true });
-            }
-        })
-        .catch(() => {
-            interaction.followUp({ content: '時間切れだちゅ…。また挑戦してね！', ephemeral: true });
-        });
+    collector.on('collect', async (reaction) => {
+        const userChoice = (reaction.emoji.name === '🐭');
+        const isCorrect = (userChoice === isNezumi);
+
+        const resultEmbed = new EmbedBuilder()
+            .setColor(isCorrect ? 0x00FF00 : 0xFF0000)
+            .setTitle(isCorrect ? '✨ 正解だちゅ！' : 'あちゃ〜、残念だちゅ…')
+            .setDescription(`この子の正体は **${chosen.name}** でした！`)
+            .setFooter({ text: isCorrect ? 'ねずみマスターだね！' : '次は当ててみてね！' });
+
+        await interaction.followUp({ embeds: [resultEmbed], ephemeral: true });
+    });
+
+    collector.on('end', collected => {
+        if (collected.size === 0) {
+            interaction.followUp({ content: '時間切れだちゅ…。また遊んでね！', ephemeral: true });
+        }
+    });
 }
 
 });

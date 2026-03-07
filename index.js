@@ -30,7 +30,35 @@ const tarotCards = [
     { name: 'XXI. 世界', tone: 'positive', upright: '完成、成功、完璧', reversed: '未完成、中途半端、スランプ', image: '21_World.jpg' }
 ];
 
+    // 主要都市の座標データ（例として一部抜粋）
+    const prefCoords = {
+    '北海道': { lat: 43.06, lon: 141.35 }, '青森': { lat: 40.82, lon: 140.74 },
+    '岩手': { lat: 39.70, lon: 141.15 }, '宮城': { lat: 38.27, lon: 140.87 },
+    '秋田': { lat: 39.72, lon: 140.10 }, '山形': { lat: 38.26, lon: 140.36 },
+    '福島': { lat: 37.75, lon: 140.47 }, '茨城': { lat: 36.34, lon: 140.45 },
+    '栃木': { lat: 36.57, lon: 139.88 }, '群馬': { lat: 36.39, lon: 139.06 },
+    '埼玉': { lat: 35.86, lon: 139.65 }, '千葉': { lat: 35.61, lon: 140.12 },
+    '東京': { lat: 35.69, lon: 139.69 }, '神奈川': { lat: 35.45, lon: 139.64 },
+    '新潟': { lat: 37.90, lon: 139.02 }, '富山': { lat: 36.70, lon: 137.21 },
+    '石川': { lat: 36.59, lon: 136.63 }, '福井': { lat: 36.07, lon: 136.22 },
+    '山梨': { lat: 35.66, lon: 138.57 }, '長野': { lat: 36.65, lon: 138.18 },
+    '岐阜': { lat: 35.39, lon: 136.72 }, '静岡': { lat: 34.98, lon: 138.38 },
+    '愛知': { lat: 35.18, lon: 136.91 }, '三重': { lat: 34.73, lon: 136.51 },
+    '滋賀': { lat: 35.00, lon: 135.87 }, '京都': { lat: 35.02, lon: 135.76 },
+    '大阪': { lat: 34.69, lon: 135.50 }, '兵庫': { lat: 34.69, lon: 135.18 },
+    '奈良': { lat: 34.69, lon: 135.83 }, '和歌山': { lat: 34.23, lon: 135.17 },
+    '鳥取': { lat: 35.50, lon: 134.24 }, '島根': { lat: 35.47, lon: 133.05 },
+    '岡山': { lat: 34.66, lon: 133.93 }, '広島': { lat: 34.40, lon: 132.46 },
+    '山口': { lat: 34.19, lon: 131.47 }, '徳島': { lat: 34.07, lon: 134.56 },
+    '香川': { lat: 34.34, lon: 134.04 }, '愛媛': { lat: 33.84, lon: 132.77 },
+    '高知': { lat: 33.56, lon: 133.53 }, '福岡': { lat: 33.61, lon: 130.42 },
+    '佐賀': { lat: 33.25, lon: 130.30 }, '長崎': { lat: 32.75, lon: 129.88 },
+    '熊本': { lat: 32.79, lon: 130.74 }, '大分': { lat: 33.24, lon: 131.61 },
+    '宮崎': { lat: 31.91, lon: 131.42 }, '鹿児島': { lat: 31.56, lon: 130.56 },
+    '沖縄': { lat: 26.21, lon: 127.68 }
+    };
 
+    
 //********************************************************************タロット*************************************************************************************************************
 // --- [追加] 画像をダウンロードして、必要なら反転させる関数 ---
 async function getCardImage(imageFileName, isReversed) {
@@ -139,6 +167,37 @@ const client = new Client({
 		GatewayIntentBits.MessageContent,
 	],
 });
+//*****************************************************************************天気予報********************************************************************************************************************* */
+function getWeatherStatus(code) {
+    const codes = {
+        0: '☀️ 快晴', 1: '🌤️ 晴れ', 2: '⛅ 時々曇り', 3: '☁️ 曇り',
+        45: '🌫️ 霧', 48: '🌫️ 氷霧',
+        51: '🌦️ 小雨', 53: '🌦️ 雨', 55: '🌧️ 激しい雨',
+        61: '🌦️ 弱い雨', 63: '🌧️ 雨', 65: '🌊 豪雨',
+        71: '❄️ 弱い雪', 73: '❄️ 雪', 75: '☃️ 豪雪',
+        80: '🌦️ にわか雨', 81: '🌧️ 強いにわか雨', 82: '🌊 激しいにわか雨',
+        95: '⛈️ 雷雨', 96: '⛈️ 雹を伴う雷雨', 99: '⛈️ 激しい雷雨'
+    };
+    return codes[code] || '❓ 不明';
+}
+function getMouseComment(code, rainProb, maxTemp) {
+    // 1. 激しい天気の時 (雷雨や雪)
+    if (code >= 95) return "ひえ〜っ、カミナリだ！おへそを隠して、安全なところでチーズを食べてよう... ⚡🧀";
+    if (code >= 71) return "外は真っ白！雪合戦もいいけど、ねずみはコタツで丸くなりたいな ☃️❄️";
+
+    // 2. 雨の心配がある時
+    if (rainProb >= 60) return "雨が降りそうだよ！傘を忘れずにね。ねずみが濡れたら、乾かすのが大変なんだ ☂️🐭";
+    if (rainProb >= 30) return "空模様が怪しいかも... 念のために折りたたみ傘を持っていくのが正解だね ☁️🌂";
+
+    // 3. 気温に関するコメント
+    if (maxTemp >= 32) return "暑すぎる〜！チーズが溶けてフォンデュになっちゃうよ。水分補給を忘れずにね！ 🔥💧";
+    if (maxTemp <= 5) return "ぶるぶる... 今日はとっても寒いね。マフラーをしっかり巻いてお出かけしてね！ 🧣🧣";
+
+    // 4. 平穏な時
+    if (code <= 1) return "最高のお出かけ日和！ねずみもどこかへ遊びに行きたい気分だよ ☀️🌷";
+    
+    return "今日も一日、あなたにとって素敵な日になりますように！🐭✨";
+}
 
 //****************************************************************************************コマンド処理・開始処理****************************************************************************************** */
 // 1. ログイン確認用のコードを追加（client.onの上に入れる）
@@ -164,7 +223,7 @@ client.once('clientReady', async (c) => {
     options: [{
         name: 'prefecture',
         type: 3, // STRING
-        description: '都道府県名を入力（例: 和歌山, 東京）',
+        description: '都道府県名を漢字で入力（例: 和歌山, 東京）',
         required: true,
     }]
     },
@@ -301,42 +360,16 @@ client.on('interactionCreate', async (interaction) => {
     await interaction.deferReply({ ephemeral: true });
     const pref = interaction.options.getString('prefecture');
 
-    // 主要都市の座標データ（例として一部抜粋）
-    const prefCoords = {
-    '北海道': { lat: 43.06, lon: 141.35 }, '青森': { lat: 40.82, lon: 140.74 },
-    '岩手': { lat: 39.70, lon: 141.15 }, '宮城': { lat: 38.27, lon: 140.87 },
-    '秋田': { lat: 39.72, lon: 140.10 }, '山形': { lat: 38.26, lon: 140.36 },
-    '福島': { lat: 37.75, lon: 140.47 }, '茨城': { lat: 36.34, lon: 140.45 },
-    '栃木': { lat: 36.57, lon: 139.88 }, '群馬': { lat: 36.39, lon: 139.06 },
-    '埼玉': { lat: 35.86, lon: 139.65 }, '千葉': { lat: 35.61, lon: 140.12 },
-    '東京': { lat: 35.69, lon: 139.69 }, '神奈川': { lat: 35.45, lon: 139.64 },
-    '新潟': { lat: 37.90, lon: 139.02 }, '富山': { lat: 36.70, lon: 137.21 },
-    '石川': { lat: 36.59, lon: 136.63 }, '福井': { lat: 36.07, lon: 136.22 },
-    '山梨': { lat: 35.66, lon: 138.57 }, '長野': { lat: 36.65, lon: 138.18 },
-    '岐阜': { lat: 35.39, lon: 136.72 }, '静岡': { lat: 34.98, lon: 138.38 },
-    '愛知': { lat: 35.18, lon: 136.91 }, '三重': { lat: 34.73, lon: 136.51 },
-    '滋賀': { lat: 35.00, lon: 135.87 }, '京都': { lat: 35.02, lon: 135.76 },
-    '大阪': { lat: 34.69, lon: 135.50 }, '兵庫': { lat: 34.69, lon: 135.18 },
-    '奈良': { lat: 34.69, lon: 135.83 }, '和歌山': { lat: 34.23, lon: 135.17 },
-    '鳥取': { lat: 35.50, lon: 134.24 }, '島根': { lat: 35.47, lon: 133.05 },
-    '岡山': { lat: 34.66, lon: 133.93 }, '広島': { lat: 34.40, lon: 132.46 },
-    '山口': { lat: 34.19, lon: 131.47 }, '徳島': { lat: 34.07, lon: 134.56 },
-    '香川': { lat: 34.34, lon: 134.04 }, '愛媛': { lat: 33.84, lon: 132.77 },
-    '高知': { lat: 33.56, lon: 133.53 }, '福岡': { lat: 33.61, lon: 130.42 },
-    '佐賀': { lat: 33.25, lon: 130.30 }, '長崎': { lat: 32.75, lon: 129.88 },
-    '熊本': { lat: 32.79, lon: 130.74 }, '大分': { lat: 33.24, lon: 131.61 },
-    '宮崎': { lat: 31.91, lon: 131.42 }, '鹿児島': { lat: 31.56, lon: 130.56 },
-    '沖縄': { lat: 26.21, lon: 127.68 }
-    };
+
 
     const target = prefCoords[pref.replace(/都|道|府|県/g, '')]; // 「県」などを抜いても動くように
 
     if (!target) {
-        return interaction.editReply('その都道府県の座標データが見つかりませんでした。');
+        return interaction.editReply('その都道府県の座標データが見つかりませんでした。',{ ephemeral: true});
     }
 
     try {
-        const url = `https://api.open-meteo.com/v1/forecast?latitude=${target.lat}&longitude=${target.lon}&daily=weathercode,temperature_2m_max,temperature_2m_min&timezone=Asia%2FTokyo`;
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${target.lat}&longitude=${target.lon}&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=Asia%2FTokyo`;
         const response = await axios.get(url);
         const daily = response.data.daily;
 
@@ -347,17 +380,22 @@ client.on('interactionCreate', async (interaction) => {
 
         // 7日分のデータをループで追加
         for (let i = 0; i < 7; i++) {
-            const date = daily.time[i];
-            const maxTemp = daily.temperature_2m_max[i];
-            const minTemp = daily.temperature_2m_min[i];
-            const code = daily.weathercode[i]; // 天気コードをアイコンに変換する関数を後で作る
+        const code = daily.weathercode[i];
+        const rainProb = daily.precipitation_probability_max[i];
+        const maxTemp = daily.temperature_2m_max[i];
+        const minTemp = daily.temperature_2m_min[i];
+    
+        const weatherStatus = getWeatherStatus(code);
+        // 💡 ここで「ねずみの一言」を取得
+        const mouseComment = getMouseComment(code, rainProb, maxTemp);
 
-            embed.addFields({ 
-                name: `${date}`, 
-                value: `最高: ${maxTemp}℃ / 最低: ${minTemp}℃`, 
-                inline: true 
-            });
-        }
+        embed.addFields({ 
+            name: `📅 ${daily.time[i]}`, 
+            // 💡 一言をメッセージに含める
+            value: `${weatherStatus}\n💧 降水確率: ${rainProb}%\n🌡️ ${maxTemp}℃ / ${minTemp}℃\n💬 *${mouseComment}*`, 
+            inline: false // 一言が長いので、inline: false（縦並び）の方が見やすいかもしれません
+        });     
+    }
 
         await interaction.editReply({ embeds: [embed]  ,ephemeral: true});
     } catch (error) {

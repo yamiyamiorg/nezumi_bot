@@ -132,6 +132,19 @@ function generateTarotStory(past, present, future) {
 
     return { storyType, totalScore, message };
 }// --------------------------------------------------------
+function getSingleCardComment(card, isReversed) {
+    if (!isReversed) {
+        // 正位置のとき
+        if (card.tone === 'positive') return "わあ！とっても良いカードだね。今日は美味しいチーズに出会えるかも！ちゅ！";
+        if (card.tone === 'negative') return "ちょっと怖いカードだけど、正位置なら「新しい出発」の意味もあるよ。鼻をヒクヒクさせて慎重に進もう！";
+        return "落ち着いた運勢だね。たまには巣穴でゆっくり毛づくろいするのもいいと思うよ。";
+    } else {
+        // 逆位置のとき
+        if (card.tone === 'positive') return "せっかくの良い運勢がひっくり返っちゃった。焦らずに、ひまわりの種でも食べて落ち着いてね。";
+        if (card.tone === 'negative') return "運気が逆転して、悪いことが去っていくサインかも！これからどんどん良くなるよ、ちゅ！";
+        return "なんだかソワソワしちゃうね。深呼吸して、尻尾を落ち着かせてから行動しよう！";
+    }
+}
 
 //**********************************************************************************************ヒットアンドブロー********************************************************************************************** */
 
@@ -256,31 +269,33 @@ client.on('interactionCreate', async (interaction) => {
 
     // --- 1枚引き (/tarot) ---
 	if (interaction.commandName === 'tarot') {
-    	// 💡 ephemeral: true を追加
-    		await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ ephemeral: true }); // 自分だけに見える設定
 
-        const selectedCard = tarotCards[Math.floor(Math.random() * tarotCards.length)];
-        const isReversed = Math.random() < 0.5;
+    const selectedCard = tarotCards[Math.floor(Math.random() * tarotCards.length)];
+    const isReversed = Math.random() < 0.5;
 
-        // [重要] 画像を取得・処理する
-        const imageAttachment = await getCardImage(selectedCard.image, isReversed);
+    // 💡 [追加] カードごとの「ねずみのささやき」を生成
+    const mouseWhisper = getSingleCardComment(selectedCard, isReversed);
 
-        const embed = new EmbedBuilder()
-            .setColor(isReversed ? 0xFF0000 : 0x00FF00)
-            .setTitle(`🔮 占い結果: ${selectedCard.name}`)
-            .setDescription(`**${isReversed ? '逆位置 🙃' : '正位置 ✨'}**`)
-            .addFields({ name: '意味', value: isReversed ? selectedCard.reversed : selectedCard.upright });
+    const imageAttachment = await getCardImage(selectedCard.image, isReversed);
 
-        if (imageAttachment) {
-            // 画像が正常に処理できた場合、Embedに設定
-            embed.setImage(`attachment://${imageAttachment.name}`); // 添付ファイルを指定する特殊な書き方
-            // 添付ファイルと一緒に返信する
-            await interaction.editReply({ embeds: [embed], files: [imageAttachment] ,ephemeral: true});
-        } else {
-            // エラー時は文字だけで返信
-            await interaction.editReply({ embeds: [embed], content: '画像の読み込みに失敗しました。',ephemeral: true });
-        }
+    const embed = new EmbedBuilder()
+        .setColor(isReversed ? 0xFF6347 : 0x00FA9A)
+        .setTitle(`🐭 ねずみの1枚引きお告げ: ${selectedCard.name}`)
+        .setDescription(`**${isReversed ? '逆位置 🙃' : '正位置 ✨'}**`)
+        .addFields(
+            { name: 'カードの意味', value: isReversed ? selectedCard.reversed : selectedCard.upright },
+            { name: 'ねずみのささやき', value: `*「${mouseWhisper}」*` } // 💡 ここにコメントを追加
+        )
+        .setFooter({ text: 'あなたに素敵な種が見つかりますように！ 🌻' });
+
+    if (imageAttachment) {
+        embed.setImage(`attachment://${imageAttachment.name}`);
+        await interaction.editReply({ embeds: [embed], files: [imageAttachment] });
+    } else {
+        await interaction.editReply({ embeds: [embed], content: '画像の読み込みに失敗しちゃった、ちゅ……。' });
     }
+}
 
 	// --- 3枚引き (/tarot3) ---
 	else if (interaction.commandName === 'tarot3') {

@@ -164,17 +164,24 @@ client.once('clientReady', async (c) => {
     const guildId = ['1450709451488100396','1455097564759330958']; 
     const guild = client.guilds.cache.get(guildId);
 
-    if (guild) {
-        // 2. このサーバーだけにコマンドを登録（即時反映されます！）
-        await guild.commands.set(data);
-        
-        // 3. 【重要】もし以前に登録した「グローバル（全サーバー用）」のコマンドが残っていたら消去する
-        await client.application.commands.set([]); 
-        
-        console.log(`サーバー [${guild.name}] 専用にコマンドを限定しました！✅`);
-    } else {
-        console.error('指定されたギルドが見つかりません。IDを確認してください。');
+   // 以前のグローバルコマンドが残っている場合は削除（混信を防ぐため）
+    await client.application.commands.set([]);
+
+    // 各ギルドに対してループで登録
+    for (const id of guildIds) {
+        try {
+            const guild = client.guilds.cache.get(id);
+            if (guild) {
+                await guild.commands.set(data);
+                console.log(`✅ サーバー [${guild.name}] にコマンドを登録しました。`);
+            } else {
+                console.warn(`⚠️ サーバーID [${id}] が見つかりません。Botが参加しているか確認してください。`);
+            }
+        } catch (error) {
+            console.error(`❌ サーバーID [${id}] への登録中にエラーが発生しました:`, error.message);
+        }
     }
+    console.log('すべての指定サーバーへの登録処理が完了しました！✨');
 });
 
 //*******************************************************************************************メイン関数***************************************************************************************** */

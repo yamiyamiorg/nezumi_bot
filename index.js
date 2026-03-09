@@ -134,7 +134,32 @@ const extraImages = {
 ];
 
     const luckyItems = ['チーズ', 'ひまわりの種', '銀のさじ', '赤いリボン', '和歌山みかん', 'お気に入りの靴下']; 
-
+const runeAlphabet = [
+    { name: 'フェイヒュー (Fehu)', symbol: 'ᚠ', meaning: '富・家畜', upright: '金運上昇。努力が形になる時だちゅ！', reversed: '無駄遣いや損失に注意が必要だちゅ。' },
+    { name: 'ウルズ (Uruz)', symbol: 'ᚢ', meaning: '力・野生牛', upright: '強いエネルギーに満ちているちゅ！前進あるのみ。', reversed: '力が空回りしそう。休息も大事だちゅ。' },
+    { name: 'ソーン (Thurisaz)', symbol: 'ᚦ', meaning: '巨人・トゲ', upright: '守護と決断。慎重に状況を見極めてちゅ。', reversed: '強引な行動はトラブルの元。立ち止まってちゅ。' },
+    { name: 'アンスズ (Ansuz)', symbol: 'ᚨ', meaning: '口・神', upright: '良い知らせや知恵が届くちゅ。対話を大切に。', reversed: '誤解や情報の混乱に気をつけてちゅ。' },
+    { name: 'ライド (Raido)', symbol: 'ᚱ', meaning: '旅・車輪', upright: 'スムーズな進行。旅行や移動にツキがあるちゅ！', reversed: '計画の遅延や足止めの予感。焦りは禁物だちゅ。' },
+    { name: 'ケナズ (Kenaz)', symbol: 'ᚲ', meaning: '松明・火', upright: '才能の開花。アイデアが次々湧いてくるちゅ！', reversed: '情熱の減退。今は無理に動かず充電してちゅ。' },
+    { name: 'ゲーボ (Gebo)', symbol: 'ᚷ', meaning: '贈り物・愛', upright: '対等な関係や素晴らしいギフトが届く予感だちゅ。', reversed: '対等な関係や素晴らしいギフトが届く予感だちゅ。' },
+    { name: 'ウンニョ (Wunjo)', symbol: 'ᚹ', meaning: '喜び・勝利', upright: '願いが叶う幸運期だちゅ！心から楽しんで。', reversed: '期待しすぎに注意。小さな幸せを大切にしてちゅ。' },
+    { name: 'ハガラズ (Hagalaz)', symbol: 'ᚻ', meaning: '雹（ひょう）', upright: '予期せぬ変化。古いものを壊して次に進むちゅ！', reversed: '予期せぬ変化。古いものを壊して次に進むちゅ！' },
+    { name: 'ナウズ (Nauthiz)', symbol: 'ᚾ', meaning: '欠乏・束縛', upright: '忍耐の時。不自由さの中から学びがあるちゅ。', reversed: '焦って動くと裏目に出るちゅ。慎重に。' },
+    { name: 'イサ (Isa)', symbol: 'ᛁ', meaning: '氷・停止', upright: '今は停止の時。静かにチャンスを待つんだちゅ。', reversed: '今は停止の時。静かにチャンスを待つんだちゅ。' },
+    { name: 'ジェラ (Jera)', symbol: 'ᛃ', meaning: '収穫・一年', upright: 'これまでの努力が実を結ぶ収穫の時だちゅ！', reversed: 'これまでの努力が実を結ぶ収穫の時だちゅ！' },
+    { name: 'エイワズ (Eihwaz)', symbol: 'ᛇ', meaning: 'イチイの木・死', upright: '変化と再生。古い自分から脱皮する時だちゅ。', reversed: '変化と再生。古い自分から脱皮する時だちゅ。' },
+    { name: 'パース (Pertho)', symbol: 'ᛈ', meaning: '運命の袋・秘密', upright: '隠れた才能や予期せぬ幸運が見つかるちゅ！', reversed: '秘密が漏れるかも。軽はずみな言動に注意だちゅ。' },
+    { name: 'アルジズ (Algiz)', symbol: 'ᛉ', meaning: '保護・ヘラジカ', upright: '強い守護があるちゅ。直感を信じて進んで！', reversed: '無防備な状態。隙を見せないように用心してちゅ。' },
+    { name: 'ソウィロ (Sowilo)', symbol: 'ᛊ', meaning: '太陽・勝利', upright: '大成功の兆し！明るい未来が待っているちゅ。', reversed: '大成功の兆し！明るい未来が待っているちゅ。' },
+    { name: 'ティワズ (Tiwaz)', symbol: 'ᛏ', meaning: '戦士・勝利', upright: '強い意志で勝利を掴めるちゅ。勇気を出して。', reversed: '意欲の低下。自信を失わないようにしてちゅ。' },
+    { name: 'ベルカナ (Berkana)', symbol: 'ᛒ', meaning: '樺の木・誕生', upright: '新しい始まりや成長。優しさが鍵になるちゅ。', reversed: '成長の停滞。家庭内の不和に注意してちゅ。' },
+    { name: 'エワズ (Ehwaz)', symbol: 'ᛖ', meaning: '馬・協力', upright: '良きパートナーシップ。協力して進むと吉だちゅ。', reversed: '足並みが揃わない。無理に合わせず様子を見てちゅ。' },
+    { name: 'マナズ (Mannaz)', symbol: 'ᛗ', meaning: '人間・自己', upright: '自分自身を見つめ直す時。謙虚さが運を呼ぶちゅ。', reversed: '自己中心的な考えに注意。周囲を大切にしてちゅ。' },
+    { name: 'ラグズ (Laguz)', symbol: 'ᛚ', meaning: '水・直感', upright: '豊かな感性。インスピレーションを大切にちゅ。', reversed: '感情に流されやすい時。冷静さを保ってちゅ。' },
+    { name: 'イングズ (Inguz)', symbol: 'ᛝ', meaning: '豊穣の神・完成', upright: '一つの区切り。満たされた気持ちになれるちゅ。', reversed: '一つの区切り。満たされた気持ちになれるちゅ。' },
+    { name: 'ダガズ (Dagaz)', symbol: 'ᛞ', meaning: '一日・光', upright: '暗闇が終わり、光が差す時。希望を持ってちゅ！', reversed: '暗闇が終わり、光が差す時。希望を持ってちゅ！' },
+    { name: 'オサラ (Othala)', symbol: 'ᛟ', meaning: '故郷・伝統', upright: '伝統や家族からの恩恵。基盤を固める時だちゅ。', reversed: '執着しすぎに注意。新しい風を取り入れてちゅ。' }
+];
 
 //********************************************************************タロット*************************************************************************************************************
 // --- [追加] 画像をダウンロードして、必要なら反転させる関数 ---
@@ -441,6 +466,26 @@ async function getGeminiFullHoroscope(rankingList) {
         return "みんなにとって素敵な一日になるちゅ！";
     }
 }
+//****************************************************************************************ルーン占い***************************************************************************************************** */
+async function getGeminiRuneReading(runeName, isReversed, username) {
+    const dateStr = new Date().toLocaleDateString();
+    const cacheKey = `rune-${dateStr}-${username}-${runeName}-${isReversed}`;
+    
+    if (readingCache.has(cacheKey)) return readingCache.get(cacheKey);
+
+    const orientation = isReversed ? "逆位置" : "正位置";
+    const prompt = `占い師「ねずみ」として、ルーン文字「${runeName}」の${orientation}が出た${username}さんに、30文字以内で神秘的な助言をして。語尾は「ちゅ」。`;
+
+    try {
+        const result = await model.generateContent(prompt);
+        const text = result.response.text().trim();
+        readingCache.set(cacheKey, text);
+        return text;
+    } catch (error) {
+        return "石に刻まれた文字が読めないちゅ…。でも運命は味方してるちゅ！";
+    }
+}
+
 
 //****************************************************************************************コマンド処理・開始処理****************************************************************************************** */
 // 1. ログイン確認用のコードを追加（client.onの上に入れる）
@@ -820,6 +865,32 @@ else if (interaction.commandName === 'horoscope') {
             });
         }
     });
+
+    await interaction.editReply({ embeds: [embed], ephemeral: true });
+}
+else if (interaction.commandName === 'rune') {
+    await interaction.deferReply({ ephemeral: true });
+
+    // 日付固定の乱数
+    const personalSeed = getPersonalDailyRandom(interaction.user.id, 777);
+    const runeIndex = Math.floor(personalSeed * runeAlphabet.length);
+    const selectedRune = runeAlphabet[runeIndex];
+
+    const reverseSeed = getPersonalDailyRandom(interaction.user.id, 888);
+    const isReversed = reverseSeed < 0.5;
+
+    // Geminiからのメッセージ
+    const geminiMessage = await getGeminiRuneReading(selectedRune.name, isReversed, interaction.user.username);
+
+    const embed = new EmbedBuilder()
+        .setColor(0x8B4513) // 木や石をイメージした茶色
+        .setTitle(`ᚱ ${interaction.user.username}さんのルーンお告げ`)
+        .setDescription(`引いたルーン：**${selectedRune.name}** (${isReversed ? '逆位置' : '正位置'})\n象徴：${selectedRune.meaning}`)
+        .addFields(
+            { name: 'ルーンの意味', value: isReversed ? selectedRune.reversed : selectedRune.upright },
+            { name: 'ねずみの予言', value: geminiMessage }
+        )
+        .setFooter({ text: `古代の石が今日（${new Date().toLocaleDateString()}）の運命を語ったちゅ！` });
 
     await interaction.editReply({ embeds: [embed], ephemeral: true });
 }

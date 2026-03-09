@@ -388,7 +388,7 @@ client.on('interactionCreate', async (interaction) => {
 	if (interaction.commandName === 'tarot') {
     await interaction.deferReply({ ephemeral: true });
 
-    // 💡 ユーザーIDに基づいた固定乱数を取得
+    // 💡 ユーザーIDと日付に基づいた固定乱数を取得
     const personalSeed = getPersonalDailyRandom(interaction.user.id);
     
     // カードの決定（日付とIDで固定）
@@ -399,7 +399,10 @@ client.on('interactionCreate', async (interaction) => {
     const reverseSeed = getPersonalDailyRandom(interaction.user.id, 999);
     const isReversed = reverseSeed < 0.5;
 
+    // 💡 消えていた「ささやき」コメントを取得
     const mouseWhisper = getSingleCardComment(selectedCard, isReversed);
+    
+    // 画像の生成（反転処理など）
     const imageAttachment = await getCardImage(selectedCard.image, isReversed);
 
     const embed = new EmbedBuilder()
@@ -408,11 +411,17 @@ client.on('interactionCreate', async (interaction) => {
         .setDescription(`**${isReversed ? '逆位置 🙃' : '正位置 ✨'}**`)
         .addFields(
             { name: 'カードの意味', value: isReversed ? selectedCard.reversed : selectedCard.upright },
-            { name: 'ねずみのささやき', value: `*「今日${interaction.user.username}さんが引くカードはこれって決まってたんだちゅ！」*` }
+            // 💡 ここに「ささやき」を復活させました
+            { name: 'ねずみのささやき', value: `*「${mouseWhisper}」*` }
         )
-        .setFooter({ text: `${new Date().toLocaleDateString()} の運勢だちゅ！` });
+        .setFooter({ text: `今日（${new Date().toLocaleDateString()}）のお告げはこれって決まってたんだちゅ！` });
 
-    await interaction.editReply({ embeds: [embed], files: [imageAttachment] });
+    if (imageAttachment) {
+        embed.setImage(`attachment://${imageAttachment.name}`);
+        await interaction.editReply({ embeds: [embed], files: [imageAttachment] });
+    } else {
+        await interaction.editReply({ embeds: [embed], content: '画像の読み込みに失敗しちゃった、ちゅ……。' });
+    }
 }
 
 	// --- 3枚引き (/tarot3) ---

@@ -589,6 +589,7 @@ else if (interaction.commandName === 'quiz') {
 
     // --- ボタン入力待ち以降の処理（変更なし） ---
 
+}
 });
 // ここに先ほどコピーした「トークン」を貼り付けます
 client.login(process.env.DISCORD_TOKEN);

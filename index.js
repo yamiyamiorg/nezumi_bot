@@ -427,7 +427,7 @@ client.on('interactionCreate', async (interaction) => {
         .addFields(
             { name: 'カードの意味', value: isReversed ? selectedCard.reversed : selectedCard.upright },
             // 💡 ここに「ささやき」を復活させました
-            { name: 'ねずみのささやき', value: `*「${mouseWhisper}」*` }
+            { name: 'ねずみのささやき', value: `*「${mouseWhisper}」*` },
             { name: 'ねずみの特別解説', value: geminiExplanation }
         )
         .setFooter({ text: `今日（${new Date().toLocaleDateString()}）のお告げはこれって決まってたんだちゅ！` });

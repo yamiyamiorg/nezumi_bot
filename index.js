@@ -223,7 +223,22 @@ function getSingleCardComment(card, isReversed) {
         return "なんだかソワソワしちゃうね。深呼吸して、尻尾を落ち着かせてから行動しよう！";
     }
 }
+// 💡 Geminiに解説を依頼する関数（トークン節約版）
+async function getGeminiReading(cardName, isReversed, username) {
+    const orientation = isReversed ? "逆位置" : "正位置";
+    
+    // プロンプトは最小限に！
+    // 役割（しろねずみ）、対象（ユーザー名）、状況（カードと正逆）のみ
+    const prompt = `あなたは占い師の「ねずみ」です。${username}さんが引いたタロット「${cardName}」の${orientation}について、癒やしを与えつつ、50文字以内で短くアドバイスして。`;
 
+    try {
+        // ここでGemini APIを呼び出し（モデルは軽量な Gemini 1.5 Flash がおすすめ）
+        const result = await model.generateContent(prompt);
+        return result.response.text();
+    } catch (error) {
+        return "占いの言葉がうまくまとまらなかったちゅ…。でも、きっと大丈夫だちゅ！";
+    }
+}
 //**********************************************************************************************ヒットアンドブロー********************************************************************************************** */
 
 function generateAnswer() {
@@ -401,7 +416,7 @@ client.on('interactionCreate', async (interaction) => {
 
     // 💡 消えていた「ささやき」コメントを取得
     const mouseWhisper = getSingleCardComment(selectedCard, isReversed);
-    
+    const geminiExplanation = await getGeminiReading(selectedCard.name, isReversed, interaction.user.username);
     // 画像の生成（反転処理など）
     const imageAttachment = await getCardImage(selectedCard.image, isReversed);
 
@@ -413,6 +428,7 @@ client.on('interactionCreate', async (interaction) => {
             { name: 'カードの意味', value: isReversed ? selectedCard.reversed : selectedCard.upright },
             // 💡 ここに「ささやき」を復活させました
             { name: 'ねずみのささやき', value: `*「${mouseWhisper}」*` }
+            { name: 'ねずみの特別解説', value: geminiExplanation }
         )
         .setFooter({ text: `今日（${new Date().toLocaleDateString()}）のお告げはこれって決まってたんだちゅ！` });
 

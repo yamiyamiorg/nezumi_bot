@@ -588,6 +588,36 @@ else if (interaction.commandName === 'quiz') {
     });
 
     // --- ボタン入力待ち以降の処理（変更なし） ---
+    try {
+        // 30秒間ボタン入力を待機
+        const confirmation = await response.awaitMessageComponent({ filter, time: 30000 });
+
+        const userChoice = (confirmation.customId === 'correct_nezumi');
+        const isCorrect = (userChoice === isNezumi);
+
+        const resultEmbed = new EmbedBuilder()
+            .setColor(isCorrect ? 0x00FF00 : 0xFF0000)
+            .setTitle(isCorrect ? '✨ 正解だちゅ！' : 'あちゃ〜、残念だちゅ…')
+            .setDescription(`この子の正体は **${chosen.name}** でした！`)
+            .setFooter({ text: isCorrect ? 'ねずみマスターだね！' : '次は当ててみてね！' });
+
+        // 💡 ポイント1: followUpではなく、この操作自体を「完了」させるためにupdateを使う
+        // これにより「不明なインタラクション」エラーを防ぎつつ結果を表示できます
+        await confirmation.update({ 
+            content: isCorrect ? '🎊 おめでとう！' : '😢 どんまいだちゅ…',
+            embeds: [resultEmbed], 
+            components: [], // ボタンを消す
+            ephemeral: true 
+        });
+
+    } catch (e) {
+        // タイムアウト時の処理
+        await interaction.editReply({ 
+            content: '時間切れだちゅ…。また遊んでね！', 
+            components: [], 
+            ephemeral: true 
+        });
+    }
 
 }
 });

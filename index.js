@@ -12,6 +12,11 @@ const sharp = require('sharp');
 const path = require('path');
 const fs = require('fs');
 require('dotenv').config();
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+// トークン節約のため、軽量な Flash モデルを使用
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
 
 // 💡 インテントの設定は、ここではなく「Client」を作る場所で行います
 const client = new Client({
@@ -239,6 +244,31 @@ async function getGeminiReading(cardName, isReversed, username) {
         return "占いの言葉がうまくまとまらなかったちゅ…。でも、きっと大丈夫だちゅ！";
     }
 }
+// 解説を一時保存するキャッシュ用変数
+const readingCache = new Map();
+
+async function getGeminiReading(cardName, isReversed, userId) {
+    const dateStr = new Date().toLocaleDateString();
+    const cacheKey = `${dateStr}-${userId}-${cardName}-${isReversed}`;
+
+    // 💡 節約ポイント：今日同じ人が同じカードを引いていたら、再生成せずにキャッシュを返す
+    if (readingCache.has(cacheKey)) return readingCache.get(cacheKey);
+
+    const orientation = isReversed ? "逆位置" : "正位置";
+    
+    // 💡 節約ポイント：プロンプトを極限まで短くし、Geminiに余計な出力をさせない
+    const prompt = `あなたは「しろねずみ」という占い師です。引かれたカード：${cardName}の${orientation}。50文字以内で、癒やしのアドバイスを1つだけ言って。語尾は「ちゅ」。`;
+
+    try {
+        const result = await model.generateContent(prompt);
+        const text = result.response.text().trim();
+        readingCache.set(cacheKey, text); // 結果を保存
+        return text;
+    } catch (error) {
+        console.error('Gemini Error:', error);
+        return "占いの言葉がうまくまとまらなかったちゅ…。でも、きっと大丈夫だちゅ！";
+    }
+}
 //**********************************************************************************************ヒットアンドブロー********************************************************************************************** */
 
 function generateAnswer() {
@@ -416,7 +446,8 @@ client.on('interactionCreate', async (interaction) => {
 
     // 💡 消えていた「ささやき」コメントを取得
     const mouseWhisper = getSingleCardComment(selectedCard, isReversed);
-    const geminiExplanation = await getGeminiReading(selectedCard.name, isReversed, interaction.user.username);
+    const geminiExplanation = await getGeminiReading(selectedCard.name, isReversed, interaction.user.id);
+
     // 画像の生成（反転処理など）
     const imageAttachment = await getCardImage(selectedCard.image, isReversed);
 

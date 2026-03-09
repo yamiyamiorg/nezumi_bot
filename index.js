@@ -601,16 +601,22 @@ client.on('interactionCreate', async (interaction) => {
     const positions = ['過去 🕰️', '現在 📍', '未来 🚀'];
     const drawnResults = []; 
 
-    // 1. 各カードの選定
-    for (let i = 0; i < 3; i++) {
-        const personalSeed = getPersonalDailyRandom(interaction.user.id, i * 100);
-        const cardIndex = Math.floor(personalSeed * tarotCards.length);
-        const card = tarotCards[cardIndex];
+    // 💡 1. デッキのコピーを作成（元のデータは壊さない）
+    let tempDeck = [...tarotCards];
 
-        const reverseSeed = getPersonalDailyRandom(interaction.user.id, i * 500);
+    for (let i = 0; i < 3; i++) {
+        // 💡 2. シード計算（iを大きく離して影響を強める）
+        const personalSeed = getPersonalDailyRandom(interaction.user.id, (i + 1) * 777);
+        
+        // 💡 3. 現在のデッキの枚数に合わせてインデックスを決定
+        const cardIndex = Math.floor(personalSeed * tempDeck.length);
+        
+        // 💡 4. デッキからカードを抜き出す（spliceを使うと重複しなくなるちゅ！）
+        const card = tempDeck.splice(cardIndex, 1)[0];
+
+        const reverseSeed = getPersonalDailyRandom(interaction.user.id, (i + 1) * 999);
         const isReversed = reverseSeed < 0.5;
 
-        // 💡 確実にデータを溜める
         drawnResults.push({ name: card.name, isReversed: isReversed, card: card });
 
         const imageAttachment = await getCardImage(card.image, isReversed);
@@ -628,14 +634,10 @@ client.on('interactionCreate', async (interaction) => {
         }
     }
 
-    // 💡 2. Geminiに3枚の結果を投げて、統合解説を生成させる
-    // 引数名を「drawnResults」に修正しました！
+    // 💡 あとの Gemini 連携やストーリー表示はそのまま！
     const geminiExplanation = await getGeminiReading3(drawnResults, interaction.user.username);
-
-    // 3. 既存のストーリーロジック（もし関数がある場合）
     const storyResult = generateTarotStory(drawnResults[0], drawnResults[1], drawnResults[2]);
 
-    // 💡 4. 最後の総評 Embed（ここが重要！）
     const storyEmbed = new EmbedBuilder()
         .setColor(0x5865F2)
         .setTitle(`📖 あなたの物語: ${storyResult.storyType}`)

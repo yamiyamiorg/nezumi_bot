@@ -392,7 +392,25 @@ function getDailyRandom(seed) {
     const x = Math.sin(dateNum + seed) * 10000;
     return x - Math.floor(x);
 }
+async function getGeminiHoroscopeMessage(topSign, bottomSign) {
+    const dateStr = new Date().toLocaleDateString();
+    const cacheKey = `horoscope-${dateStr}-${topSign}-${bottomSign}`;
+    
+    if (readingCache.has(cacheKey)) return readingCache.get(cacheKey);
 
+    // 💡 節約ポイント：1位と12位の情報だけ送り、50文字程度で生成させる
+    const prompt = `占い師「ねずみ」として、今日の星座占いで1位の${topSign}にお祝いを、12位の${bottomSign}に短い励ましを言って。合計60文字以内。語尾は「ちゅ」。`;
+
+    try {
+        const result = await model.generateContent(prompt);
+        const text = result.response.text().trim();
+        readingCache.set(cacheKey, text);
+        return text;
+    } catch (error) {
+        console.error('Gemini Horoscope Error:', error);
+        return "みんなに良いことがありますようにだちゅ！✨";
+    }
+}
 
 //****************************************************************************************コマンド処理・開始処理****************************************************************************************** */
 // 1. ログイン確認用のコードを追加（client.onの上に入れる）
@@ -730,22 +748,27 @@ else if (interaction.commandName === 'quiz') {
 else if (interaction.commandName === 'horoscope') {
     await interaction.deferReply({ ephemeral: true });
 
-    // 1. 各星座のスコアを計算してランキング化
+    // 1. 各星座のスコアを計算（日付固定ロジック）
     const ranking = signs.map((name, index) => {
-        // 星座ごとに固有のseedを混ぜて、その日固定のスコアを作る
         const score = Math.floor(getDailyRandom(index) * 100) + 1;
         const itemIdx = Math.floor(getDailyRandom(index + 100) * luckyItems.length);
         return { name, score, luckyItem: luckyItems[itemIdx] };
     });
 
-    // スコア順に並び替え
     ranking.sort((a, b) => b.score - a.score);
+
+    const topSign = ranking[0].name;
+    const bottomSign = ranking[11].name;
+
+    // 💡 2. Geminiに特別なメッセージをもらう
+    const geminiMessage = await getGeminiHoroscopeMessage(topSign, bottomSign);
 
     const embed = new EmbedBuilder()
         .setColor(0xFFD700)
         .setTitle(`🐭 ねずみ星座占い（${new Date().toLocaleDateString()}）`)
-        .setDescription('今日の運勢ランキングだちゅ！✨')
-    // 上位3位を豪華に表示
+        .setDescription(`**ねずみの一言アドバイス：**\n「${geminiMessage}」`)
+
+    // 上位3位の表示
     ranking.slice(0, 3).forEach((item, i) => {
         const medal = ['🥇', '🥈', '🥉'][i];
         embed.addFields({ 

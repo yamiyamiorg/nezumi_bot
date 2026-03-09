@@ -872,28 +872,31 @@ else if (interaction.commandName === 'horoscope') {
 else if (interaction.commandName === 'rune') {
     await interaction.deferReply({ ephemeral: true });
 
-    // 日付固定の乱数
+    // 1. 日付固定でルーンを引く
     const personalSeed = getPersonalDailyRandom(interaction.user.id, 777);
     const runeIndex = Math.floor(personalSeed * runeAlphabet.length);
     const selectedRune = runeAlphabet[runeIndex];
 
-    const reverseSeed = getPersonalDailyRandom(interaction.user.id, 888);
-    const isReversed = reverseSeed < 0.5;
+    // 2. 逆位置の判定（逆位置がない文字は強制的に正位置にする）
+    const noReverseRunes = ['ᛗ', 'ᚷ', 'ᚹ', 'ᚻ', 'ᚾ', 'ᛁ', 'ᛃ', 'ᛇ', 'ᛊ', 'ᛝ', 'ᛞ'];
+    let isReversed = getPersonalDailyRandom(interaction.user.id, 888) < 0.5;
+    if (noReverseRunes.includes(selectedRune.symbol)) isReversed = false;
 
-    // Geminiからのメッセージ
+    // 3. Geminiに短い助言を依頼
     const geminiMessage = await getGeminiRuneReading(selectedRune.name, isReversed, interaction.user.username);
 
     const embed = new EmbedBuilder()
-        .setColor(0x8B4513) // 木や石をイメージした茶色
-        .setTitle(`ᚱ ${interaction.user.username}さんのルーンお告げ`)
-        .setDescription(`引いたルーン：**${selectedRune.name}** (${isReversed ? '逆位置' : '正位置'})\n象徴：${selectedRune.meaning}`)
+        .setColor(0x8B4513)
+        .setTitle(`ᚱ 今日のルーン：${selectedRune.symbol} ${selectedRune.name}`)
         .addFields(
-            { name: 'ルーンの意味', value: isReversed ? selectedRune.reversed : selectedRune.upright },
-            { name: 'ねずみの予言', value: geminiMessage }
+            { name: '象徴', value: selectedRune.meaning, inline: true },
+            { name: '向き', value: isReversed ? '逆位置 🙃' : '正位置 ✨', inline: true },
+            { name: '石に刻まれた意味', value: isReversed ? selectedRune.reversed : selectedRune.upright },
+            { name: 'ねずみのお告げ', value: geminiMessage } // ここがGemini担当
         )
-        .setFooter({ text: `古代の石が今日（${new Date().toLocaleDateString()}）の運命を語ったちゅ！` });
+        .setFooter({ text: `${new Date().toLocaleDateString()} の石の言葉だちゅ！` });
 
-    await interaction.editReply({ embeds: [embed], ephemeral: true });
+    await interaction.editReply({ embeds: [embed] });
 }
 });
 // ここに先ほどコピーした「トークン」を貼り付けます

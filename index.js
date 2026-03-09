@@ -1,4 +1,12 @@
-const { Client, GatewayIntentBits, EmbedBuilder, AttachmentBuilder } = require('discord.js'); 
+const { 
+    Client, 
+    GatewayIntentBits, 
+    EmbedBuilder, 
+    AttachmentBuilder,
+    ActionRowBuilder, // 💡 追加
+    ButtonBuilder,    // 💡 追加
+    ButtonStyle       // 💡 追加
+} = require('discord.js');
 const axios = require('axios');
 const sharp = require('sharp');
 const path = require('path');
@@ -531,48 +539,51 @@ if (['mouse', 'rat', 'nezumi'].includes(interaction.commandName)) {
     }
 }
 else if (interaction.commandName === 'quiz') {
-    await interaction.deferReply();
+    await interaction.deferReply({ ephemeral: true });
 
-    // 1. 画像をランダムに選ぶ
     const categories = ['mouse', 'rat', 'not_mouse'];
     const category = categories[Math.floor(Math.random() * categories.length)];
     const chosen = extraImages[category][Math.floor(Math.random() * extraImages[category].length)];
     const isNezumi = (category === 'mouse' || category === 'rat');
 
-    // 2. 軽量化した画像を準備
     const attachment = await getJokeImage(chosen.file);
     if (!attachment) return interaction.editReply('画像がお散歩中で見つからないちゅ…。');
+
+    // 💡 ボタンの作成
+    const row = new ActionRowBuilder()
+        .addComponents(
+            new ButtonBuilder()
+                .setCustomId('correct_nezumi')
+                .setLabel('ねずみだちゅ！')
+                .setEmoji('🐭')
+                .setStyle(ButtonStyle.Success), // 緑色
+            new ButtonBuilder()
+                .setCustomId('incorrect_nezumi')
+                .setLabel('ねずみじゃない！')
+                .setEmoji('❌')
+                .setStyle(ButtonStyle.Danger) // 赤色
+        );
 
     const embed = new EmbedBuilder()
         .setColor(0xFFA500)
         .setTitle('❓ ねずみクイズ！')
-        .setDescription('この画像の子は「ねずみ」かな？\n下のボタン（リアクション）で答えてね！')
+        .setDescription('この画像の子は「ねずみ」かな？\n下のボタンを押して答えてね！')
         .setImage(`attachment://${attachment.name}`);
 
-    // 3. メッセージを送信
-    const message = await interaction.editReply({ 
+    const response = await interaction.editReply({ 
         embeds: [embed], 
         files: [attachment], 
-        fetchReply: true 
+        components: [row] ,// 💡 ボタンを設置
+        ephemeral: true
     });
 
-    // 💡 [ここがポイント] Bot自身が先にリアクションを付ける
+    // 💡 ボタンの入力を待つ（30秒間）
+    const filter = i => i.user.id === interaction.user.id;
+
     try {
-        await message.react('🐭');
-        await message.react('❌');
-    } catch (error) {
-        console.error('リアクションの付与に失敗したちゅ…:', error);
-    }
+        const confirmation = await response.awaitMessageComponent({ filter, time: 30000 });
 
-    // 4. ユーザーの回答を待つ（コレクター）
-    const filter = (reaction, user) => {
-        return ['🐭', '❌'].includes(reaction.emoji.name) && user.id === interaction.user.id;
-    };
-
-    const collector = message.createReactionCollector({ filter, max: 1, time: 30000 });
-
-    collector.on('collect', async (reaction) => {
-        const userChoice = (reaction.emoji.name === '🐭');
+        const userChoice = (confirmation.customId === 'correct_nezumi');
         const isCorrect = (userChoice === isNezumi);
 
         const resultEmbed = new EmbedBuilder()
@@ -581,14 +592,18 @@ else if (interaction.commandName === 'quiz') {
             .setDescription(`この子の正体は **${chosen.name}** でした！`)
             .setFooter({ text: isCorrect ? 'ねずみマスターだね！' : '次は当ててみてね！' });
 
+        // ボタンを無効化して回答を表示
+        await confirmation.update({ 
+            embeds: [embed.setFooter({ text: 'クイズ終了！' })], 
+            components: [] ,
+            ephemeral: true
+        });
+        
         await interaction.followUp({ embeds: [resultEmbed], ephemeral: true });
-    });
 
-    collector.on('end', collected => {
-        if (collected.size === 0) {
-            interaction.followUp({ content: '時間切れだちゅ…。また遊んでね！', ephemeral: true });
-        }
-    });
+    } catch (e) {
+        await interaction.editReply({ content: '時間切れだちゅ…。また遊んでね！', components: [],ephemeral: true });
+    }
 }
 
 });

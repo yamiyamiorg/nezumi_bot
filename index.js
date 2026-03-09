@@ -118,7 +118,14 @@ const extraImages = {
         { file: 'not19_horinezumi.jpg', name: 'ホリネズミ' },
     ]
 };
-    
+   const signs = [
+    '牡羊座', '牡牛座', '双子座', '蟹座', '獅子座', '乙女座', 
+    '天秤座', '蠍座', '射手座', '山羊座', '水瓶座', '魚座'
+];
+
+    const luckyItems = ['チーズ', 'ひまわりの種', '銀のさじ', '赤いリボン', '和歌山みかん', 'お気に入りの靴下']; 
+
+
 //********************************************************************タロット*************************************************************************************************************
 // --- [追加] 画像をダウンロードして、必要なら反転させる関数 ---
 async function getCardImage(imageFileName, isReversed) {
@@ -292,6 +299,16 @@ async function getJokeImage(fileName) {
         return null;
     }
 }
+//*****************************************************************************************星座占い****************************************************************************************************** */
+function getDailyRandom(seed) {
+    const date = new Date();
+    // yyyymmdd形式の数値をシードにする
+    const dateNum = (date.getFullYear() * 10000) + ((date.getMonth() + 1) * 100) + date.getDate();
+    const x = Math.sin(dateNum + seed) * 10000;
+    return x - Math.floor(x);
+}
+
+
 //****************************************************************************************コマンド処理・開始処理****************************************************************************************** */
 // 1. ログイン確認用のコードを追加（client.onの上に入れる）
 client.once('clientReady', async (c) => {
@@ -324,6 +341,7 @@ client.once('clientReady', async (c) => {
     { name: 'rat', description: 'かっこいいラットの画像を表示するよ、ちゅ！' },
     { name: 'nezumi', description: 'ねずみの画像……かな？' },
     { name: 'quiz', description: 'この画像はねずみかな？クイズに挑戦！' },
+    { name: 'horoscope', description: '今日の星座運勢ランキングを表示するちゅ！' } ,// 💡 これを追加！
     ];
 
     // 1. 拠点となるサーバーのIDを指定（ここにコピーしたIDを貼り付け）
@@ -602,6 +620,39 @@ else if (interaction.commandName === 'quiz') {
             ephemeral: true 
         });
     }
+}
+else if (interaction.commandName === 'horoscope') {
+    await interaction.deferReply({ ephemeral: true });
+
+    // 1. 各星座のスコアを計算してランキング化
+    const ranking = signs.map((name, index) => {
+        // 星座ごとに固有のseedを混ぜて、その日固定のスコアを作る
+        const score = Math.floor(getDailyRandom(index) * 100) + 1;
+        const itemIdx = Math.floor(getDailyRandom(index + 100) * luckyItems.length);
+        return { name, score, luckyItem: luckyItems[itemIdx] };
+    });
+
+    // スコア順に並び替え
+    ranking.sort((a, b) => b.score - a.score);
+
+    const embed = new EmbedBuilder()
+        .setColor(0xFFD700)
+        .setTitle(`🐭 ねずみ星座占い（${new Date().toLocaleDateString()}）`)
+        .setDescription('今日の運勢ランキングだちゅ！✨')
+    // 上位3位を豪華に表示
+    ranking.slice(0, 3).forEach((item, i) => {
+        const medal = ['🥇', '🥈', '🥉'][i];
+        embed.addFields({ 
+            name: `${medal} 第${i+1}位: ${item.name}`, 
+            value: `運勢: **${item.score}点**！\nラッキーアイテム: \`${item.luckyItem}\`` 
+        });
+    });
+
+    // 4位以下を簡潔に表示
+    const others = ranking.slice(3).map((item, i) => `${i+4}位: ${item.name}`).join(' | ');
+    embed.addFields({ name: '4位以下の星座', value: others });
+
+    await interaction.editReply({ embeds: [embed], ephemeral: true });
 }
 });
 // ここに先ほどコピーした「トークン」を貼り付けます

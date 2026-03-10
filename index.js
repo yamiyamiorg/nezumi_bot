@@ -517,23 +517,10 @@ async function getGeminiRuneReading(runeName, isReversed, username) {
     }
 }
 //**************************************************************************************目指せネズミマスター******************************************************************************************** */
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// 【追加】ペット育成ゲーム用のデータとセーブ機能
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 const petDataFile = path.join(__dirname, 'pets.json');
 let userPets = {};
 
-// Bot起動時にセーブデータを読み込むちゅ！
-if (fs.existsSync(petDataFile)) {
-    try {
-        userPets = JSON.parse(fs.readFileSync(petDataFile, 'utf8'));
-    } catch (e) {
-        console.error('ペットデータの読み込みに失敗したちゅ:', e);
-    }
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// 【追加】ペットデータの読み込みと、ランクの自動割り当て
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-let userPets = {};
+// 1. データの読み込み
 if (fs.existsSync(petDataFile)) {
     try {
         userPets = JSON.parse(fs.readFileSync(petDataFile, 'utf8'));
@@ -542,7 +529,7 @@ if (fs.existsSync(petDataFile)) {
     }
 }
 
-// 💡 ここから追加！まだランクがないペットに、連番でランクを与えるちゅ
+// 2. ランクの自動割り当て（下剋上用）
 let maxRank = 0;
 for (const id in userPets) {
     if (userPets[id].rank && userPets[id].rank > maxRank) {
@@ -555,10 +542,8 @@ for (const id in userPets) {
         userPets[id].rank = maxRank; // 1位、2位、3位...と順番に付与
     }
 }
-savePets(); // ランクを付けたら忘れずセーブ！
-}
 
-// セーブデータをファイルに書き込む魔法の関数ちゅ！
+// 3. セーブ用関数
 function savePets() {
     fs.writeFileSync(petDataFile, JSON.stringify(userPets, null, 2));
 }
@@ -1415,7 +1400,7 @@ client.on('interactionCreate', async (interaction) => {
             await interaction.editReply({ embeds: [updateEmbed().addFields({ name: '🎙️ AI実況（生成中...）', value: aiCommentary })], components: [] });
 
             // プロンプトにランク変動の結果も教え込むちゅ！
-            const prompt = `あなたは「しろねずみ」という名前の実況者です。以下のペットバトルのログとランク変動を読み、150文字以内で熱く、そして「death is salvation（死こそ救済）」というような少しダークでヒリヒリする雰囲気で勝者を讃える実況をしてください。語尾は「ちゅ」にすること。\n\n勝者: ${winnerName}\nランク変動: ${rankMsg}\nログ: ${battleLog.slice(-500)}`;
+            const prompt = `あなたは「ねずみ」という名前の実況者です。以下のペットバトルのログとランク変動を読み、150文字以内で熱く、そしてヒリヒリする雰囲気で勝者を讃える実況をしてください。語尾は「ちゅ」にすること。\n\n勝者: ${winnerName}\nランク変動: ${rankMsg}\nログ: ${battleLog.slice(-500)}`;
 
             try {
                 aiCommentary = await callLocalLLM(prompt);

@@ -218,7 +218,8 @@ async function callLocalLLM(prompt) {
         throw error; 
     }
 }
-async function compressAndGetAttachment(imageFileName, targetWidth = 500) {
+// 💡 【修正】画像圧縮関数 (接頭辞 prefix を追加して、寿司とペットを区別できるようにしたちゅ！)
+async function compressAndGetAttachment(imageFileName, targetWidth = 500, prefix = 'img') {
     try {
         const imagePath = path.join(__dirname, 'images', imageFileName);
         if (!fs.existsSync(imagePath)) return null;
@@ -229,7 +230,8 @@ async function compressAndGetAttachment(imageFileName, targetWidth = 500) {
             .webp({ quality: 60 }) // 💡 画質を60%に落として圧縮！
             .toBuffer();
         
-        const randomName = `s_${Date.now()}.webp`;
+        // 接頭辞prefixを使ってランダムな名前を作るちゅ
+        const randomName = `${prefix}_${Date.now()}.webp`;
         return new AttachmentBuilder(imageBuffer, { name: randomName });
     } catch (error) {
         console.error('画像圧縮エラー:', error.message);
@@ -568,30 +570,40 @@ function savePets() {
 }
 
 // 最初の相棒候補（種族データ）
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 【進化】最初の相棒候補（画像ファイル名の追加！）
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 【進化】最初の相棒候補（種族画像 image フィールドを追加したちゅ！）
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 const petSpecies = [
     { 
         name: 'ヒノネズミ', emoji: '🔥', 
-        baseHp: 45, baseAtk: 7, baseDef: 3, baseSpd: 5, maxSp: 15, staggerMax: 20, 
+baseHp: 45, baseAtk: 7, baseDef: 3, baseSpd: 5, maxSp: 15, staggerMax: 20, 
         desc: '燃える闘志を持ったバランス型。攻撃と素早さが安定して育つちゅ。',
-        growth: { hp: [2, 4], atk: [1, 3], def: [0, 1], spd: [1, 2], maxSp: [0, 2], staggerMax: [1, 2] }
+        growth: { hp: [2, 4], atk: [1, 3], def: [0, 1], spd: [1, 2], maxSp: [0, 2], staggerMax: [1, 2] },
+        image: 'p_hino.jpg' // 【追加】ヒノネズミの画像だちゅ！
     },
     { 
         name: 'ミズネズミ', emoji: '💧', 
-        baseHp: 55, baseAtk: 4, baseDef: 5, baseSpd: 2, maxSp: 15, staggerMax: 25, 
+baseHp: 55, baseAtk: 4, baseDef: 5, baseSpd: 2, maxSp: 15, staggerMax: 25, 
         desc: 'マイペースな要塞。HP・防御力・混乱耐性がグングン伸びる最強の壁役だちゅ。',
-        growth: { hp: [3, 6], atk: [0, 2], def: [1, 3], spd: [0, 1], maxSp: [0, 1], staggerMax: [1, 3] }
+        growth: { hp: [3, 6], atk: [0, 2], def: [1, 3], spd: [0, 1], maxSp: [0, 1], staggerMax: [1, 3] },
+        image: 'p_mizu.jpg' // 【追加】ミズネズミの画像だちゅ！
     },
     { 
         name: 'クサネズミ', emoji: '🌿', 
-        baseHp: 50, baseAtk: 5, baseDef: 4, baseSpd: 4, maxSp: 20, staggerMax: 15, 
+baseHp: 50, baseAtk: 5, baseDef: 4, baseSpd: 4, maxSp: 20, staggerMax: 15, 
         desc: '自然を愛する優しいねずみ。SP上限が圧倒的に伸びやすく、必殺技を狙いやすいちゅ。',
-        growth: { hp: [2, 5], atk: [1, 2], def: [0, 2], spd: [0, 2], maxSp: [2, 4], staggerMax: [0, 2] }
+        growth: { hp: [2, 5], atk: [1, 2], def: [0, 2], spd: [0, 2], maxSp: [2, 4], staggerMax: [0, 2] },
+        image: 'p_kusa.jpg' // 【追加】クサネズミの画像だちゅ！
     },
     { 
         name: 'エレキネズミ', emoji: '⚡', 
-        baseHp: 35, baseAtk: 8, baseDef: 2, baseSpd: 7, maxSp: 10, staggerMax: 15, 
+baseHp: 35, baseAtk: 8, baseDef: 2, baseSpd: 7, maxSp: 10, staggerMax: 15, 
         desc: '超高速の紙装甲アタッカー。素早さと攻撃力は最強だけど、とっても打たれ弱いちゅ。',
-        growth: { hp: [1, 3], atk: [2, 4], def: [0, 1], spd: [1, 3], maxSp: [0, 1], staggerMax: [0, 1] }
+        growth: { hp: [1, 3], atk: [2, 4], def: [0, 1], spd: [1, 3], maxSp: [0, 1], staggerMax: [0, 1] },
+        image: 'p_eleki.jpg' // 【追加】エレキネズミの画像だちゅ！
     }
 ];
 
@@ -987,7 +999,7 @@ client.on('interactionCreate', async (interaction) => {
         await interaction.deferReply({ ephemeral: true }); // epemeral指定
 
         // 1. 大将の画像を圧縮して取得
-        const daishoAttachment = await compressAndGetAttachment('daisho.jpg');
+        const daishoAttachment = await compressAndGetAttachment('daisho.jpg', 500, 's'); // 's' を追加
         
         // 2. 寿司リストのSelectMenu（プルダウン）を作成
         const sushiOptions = sushiMenu.map((item, index) => ({
@@ -1026,7 +1038,7 @@ client.on('interactionCreate', async (interaction) => {
         const selectedSushi = sushiMenu[selectedIndex];
 
         // 指定された寿司の画像を圧縮して取得
-        const sushiAttachment = await compressAndGetAttachment(selectedSushi.image);
+        const sushiAttachment = await compressAndGetAttachment(selectedSushi.image, 500, 's'); // 's' を追加
 
         const embed = new EmbedBuilder()
             .setColor(0x00FF00)
@@ -1161,8 +1173,7 @@ client.on('interactionCreate', async (interaction) => {
         // ボタンとセレクトメニューを消して結果をUpdate
         await interaction.editReply({ embeds: [embed], components: [] });
     }
-    // 💡 【追加】/pet_catch コマンド (相棒を捕まえる)
-    // 💡 【超進化】/pet_catch コマンド (個体値・ランダムステータス ＆ 全ステータス表示)
+    // 💡 【超進化】/pet_catch コマンド (画像表示対応 ＆ 圧縮)
     else if (interaction.commandName === 'pet_catch') {
         await interaction.deferReply({ ephemeral: true });
         const userId = interaction.user.id;
@@ -1183,30 +1194,33 @@ client.on('interactionCreate', async (interaction) => {
         }
         const newRank = currentMaxRank + 1;
 
-        // 💡 追加：同じ種族でも「個体値（才能）」にバラつきを持たせるちゅ！（乱数で少しブレる）
-        const rMaxHp = Math.max(10, species.baseHp + Math.floor(Math.random() * 7) - 3); // -3 〜 +3 のブレ
-        const rAtk = Math.max(1, species.baseAtk + Math.floor(Math.random() * 5) - 2);   // -2 〜 +2 のブレ
-        const rDef = Math.max(0, species.baseDef + Math.floor(Math.random() * 5) - 2);   // -2 〜 +2 のブレ
-        const rSpd = Math.max(1, species.baseSpd + Math.floor(Math.random() * 5) - 2);   // -2 〜 +2 のブレ
-        const rSp = Math.max(5, species.maxSp + Math.floor(Math.random() * 5) - 2);      // -2 〜 +2 のブレ
-        const rStagger = Math.max(5, species.staggerMax + Math.floor(Math.random() * 7) - 3); // -3 〜 +3 のブレ
+        // 💡 追加：捕まえた相棒の画像を圧縮して取得
+        let petAttachment = null;
+        if (species.image) {
+            petAttachment = await compressAndGetAttachment(species.image, 500, 'p'); // prefix 'p'
+        }
 
+        // 💡 種族ごとの才能（個体値）乱数を設定 (-2 〜 +2)
+        const rand Talent = () => Math.floor(Math.random() * 5) - 2;
+        
         // ユーザー専用のペットデータを作成
         userPets[userId] = {
             name: species.name,
             emoji: species.emoji,
             level: 1,
             exp: 0,
-            hp: rMaxHp,
-            maxHp: rMaxHp,
-            atk: rAtk,
-            def: rDef,
-            spd: rSpd,
-            maxSp: rSp,
-            staggerMax: rStagger,
+            // 初期ステータスに才能をプラス！
+            hp: Math.max(10, species.baseHp + randTalent() * 2), 
+            maxHp: Math.max(10, species.baseHp + randTalent() * 2),
+            atk: Math.max(1, species.baseAtk + randTalent()),
+            def: Math.max(0, species.baseDef + randTalent()),
+            spd: Math.max(1, species.baseSpd + randTalent()),
+            maxSp: Math.max(5, species.maxSp + randTalent()),
+            staggerMax: Math.max(5, species.staggerMax + randTalent()),
             rank: newRank
         };
 
+        // ファイルにセーブ！
         savePets();
 
         const embed = new EmbedBuilder()
@@ -1215,14 +1229,22 @@ client.on('interactionCreate', async (interaction) => {
             .setDescription(`${species.desc}\nこれから一緒に冒険して、最強の相棒に育てるちゅ！\n*(※同じ種族でも捕まえた子によって少しだけ「才能（初期ステータス）」が違うちゅ！)*`)
             .addFields(
                 { name: '基本情報', value: `ランク: 第${newRank}位 | レベル: Lv.1`, inline: false },
-                // 💡 修正：すべてのステータスを表示する！
-                { name: '初期ステータス', value: `❤️ HP: ${rMaxHp} | 🗡️ ATK: ${rAtk} | 🛡️ DEF: ${rDef}\n💨 SPD: ${rSpd} | 🧠 SP上限: ${rSp} | 💫 混乱耐性: ${rStagger}`, inline: false }
+                // すべてのステータスを表示
+                { name: '初期ステータス', value: `❤️ HP: ${userPets[userId].maxHp} | 🗡️ ATK: ${userPets[userId].atk} | 🛡️ DEF: ${userPets[userId].def}\n💨 SPD: ${userPets[userId].spd} | 🧠 SP上限: ${userPets[userId].maxSp} | 💫 混乱耐性: ${userPets[userId].staggerMax}`, inline: false }
             );
 
-        await interaction.editReply({ embeds: [embed] });
+        // 💡 追加：画像をEmbedにセット
+        if (petAttachment) {
+            embed.setImage(`attachment://${petAttachment.name}`);
+        }
+
+        // 💡 修正：Replyにfilesを追加して画像を送信
+        const replyOptions = { embeds: [embed] };
+        if (petAttachment) replyOptions.files = [petAttachment];
+        await interaction.editReply(replyOptions);
     }
 
-    // 💡 【追加】/pet_status コマンド (ステータス確認)
+    // 💡 【超進化】/pet_status コマンド (画像表示対応 ＆ 圧縮)
     else if (interaction.commandName === 'pet_status') {
         await interaction.deferReply({ ephemeral: true });
         const userId = interaction.user.id;
@@ -1232,22 +1254,35 @@ client.on('interactionCreate', async (interaction) => {
             return interaction.editReply('あなたはまだ相棒を持っていないちゅ。`/pet_catch` で探しに行こうちゅ！🌱');
         }
 
-        // 次のレベルまでの必要経験値 (レベル×10 とするちゅ)
+        // 💡 追加：相棒の画像を種族データから検索して圧縮取得
+        const speciesData = petSpecies.find(s => s.name === myPet.name);
+        let petAttachment = null;
+        if (speciesData && speciesData.image) {
+            petAttachment = await compressAndGetAttachment(speciesData.image, 500, 'p'); // prefix 'p'
+        }
+
+        // 次のレベルまでの必要経験値
         const nextExp = myPet.level * 10;
 
         const embed = new EmbedBuilder()
             .setColor(0x00BFFF)
-            // 💡 修正：タイトルに「現在のランク」を表示！
             .setTitle(`🏆 第${myPet.rank}位 ${myPet.emoji} ${interaction.user.username}の相棒：${myPet.name}`)
             .setDescription(`現在 **Lv.${myPet.level}** だちゅ！`)
             .addFields(
-                // 💡 修正：DEFやSPDも表示するようにレイアウト変更！
                 { name: 'ステータス', value: `❤️ HP: ${myPet.hp} / ${myPet.maxHp}\n🗡️ ATK: ${myPet.atk} | 🛡️ DEF: ${myPet.def}\n💨 SPD: ${myPet.spd}`, inline: false },
                 { name: '経験値 (EXP)', value: `${myPet.exp} / ${nextExp}`, inline: false }
             )
             .setFooter({ text: '※特訓やバトルで最強を目指すちゅ！' });
 
-        await interaction.editReply({ embeds: [embed] });
+        // 💡 追加：画像をEmbedにセット
+        if (petAttachment) {
+            embed.setImage(`attachment://${petAttachment.name}`);
+        }
+
+        // 💡 修正：Replyにfilesを追加して画像を送信
+        const replyOptions = { embeds: [embed] };
+        if (petAttachment) replyOptions.files = [petAttachment];
+        await interaction.editReply(replyOptions);
     }
     // 💡 【追加】/pet_train コマンド (特訓してレベルアップ)
     // 💡 【超進化】/pet_train コマンド (全パラメーター成長＆個性爆発)
@@ -1257,14 +1292,30 @@ client.on('interactionCreate', async (interaction) => {
         const userId = interaction.user.id;
         const myPet = userPets[userId];
         
-        // 💡 追加：選んだ特訓コースを受け取る！
         const course = interaction.options.getString('course');
-        
+        const trainCooldowns = new Map();
+        // 1. 相棒がいるかチェック
         if (!myPet) {
             return interaction.editReply('特訓する相棒がいないちゅ！まずは `/pet_catch` で見つけるちゅ！🌱');
         }
 
-        // 💡 コースごとの「成長係数（ボーナス）」とフレーバーテキストを設定
+        // 💡 2. 【追加】クールダウン（5分 = 300,000ミリ秒）のチェック！
+        const COOLDOWN_TIME = 5 * 60 * 1000; 
+        const lastTrain = trainCooldowns.get(userId);
+        
+        // 最後に特訓した時間から5分経っていない場合
+        if (lastTrain && (Date.now() - lastTrain) < COOLDOWN_TIME) {
+            const timeLeft = COOLDOWN_TIME - (Date.now() - lastTrain);
+            const minutes = Math.floor(timeLeft / 60000);
+            const seconds = Math.floor((timeLeft % 60000) / 1000);
+            return interaction.editReply(`💦 相棒がヘトヘトだちゅ！次の特訓まであと **${minutes}分${seconds}秒** 休ませてあげてちゅ！🍵`);
+        }
+
+        // 💡 特訓を始めるので、今の時間をタイマーに記録するちゅ！
+        trainCooldowns.set(userId, Date.now());
+
+
+        // ⬇️ ここから下は今までと同じ処理だちゅ！(フレーバーテキスト設定など)
         let bonus = { hp: 0, atk: 0, def: 0, spd: 0, sp: 0, stagger: 0 };
         let flavorText = "";
 
@@ -1301,7 +1352,6 @@ client.on('interactionCreate', async (interaction) => {
             const g = speciesData.growth;
             const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 
-            // 💡 種族の基本成長率 ＋【特訓コースの成長係数ボーナス】を足すちゅ！
             const hpGrowth = rand(g.hp[0], g.hp[1]) + bonus.hp;
             const atkGrowth = rand(g.atk[0], g.atk[1]) + bonus.atk;
             const defGrowth = rand(g.def[0], g.def[1]) + bonus.def;
@@ -1340,8 +1390,8 @@ client.on('interactionCreate', async (interaction) => {
     }
     // 💡 【追加】/pet_battle コマンド (PvPバトル)
     // 💡 【超進化】/pet_battle コマンド (マッチ・混乱・SPシステム ＆ AI実況搭載)
+    // 💡 【超進化】/pet_battle コマンド (混乱・SP・混乱回復・AI実況 ＆ 相手画像表示圧縮)
     else if (interaction.commandName === 'pet_battle') {
-        // 💡 修正：みんなが闘技場を見れるように ephemeral: true を消したちゅ！
         await interaction.deferReply(); 
         const challengerId = interaction.user.id;
         const opponentUser = interaction.options.getUser('opponent');
@@ -1354,8 +1404,8 @@ client.on('interactionCreate', async (interaction) => {
         if (!oppPet) return interaction.editReply(`${opponentUser.username}さんはまだ相棒を持っていないちゅ…。`);
         if (challengerId === opponentId) return interaction.editReply('自分自身とは戦えないちゅ！🐭💦');
 
-        // 💡 修正：古いデータでも計算が「NaN」になってバグらないように完璧に補完するちゅ！
         const initStats = (pet) => {
+            // 古いデータとの互換性も保つ
             return {
                 hp: pet.maxHp, 
                 stagger: pet.staggerMax || 20, 
@@ -1369,21 +1419,34 @@ client.on('interactionCreate', async (interaction) => {
         let myState = initStats(myPet);
         let oppState = initStats(oppPet);
         
+        // 💡 追加：対戦相手の相棒画像を圧縮して取得！
+        const oppSpecies = petSpecies.find(s => s.name === oppPet.name);
+        let oppAttachment = null;
+        if (oppSpecies && oppSpecies.image) {
+            oppAttachment = await compressAndGetAttachment(oppSpecies.image, 500, 'p'); // prefix 'p'
+        }
+
         let turn = 1;
         let battleLog = "⚔️ **BATTLE START** ⚔️\n";
         let isGameOver = false;
 
         const updateEmbed = () => {
-            return new EmbedBuilder()
+            const embed = new EmbedBuilder()
                 .setColor(0x8B0000) 
                 .setTitle(`🩸 死闘：${interaction.user.username} VS ${opponentUser.username} [ターン${turn}]`)
                 .setDescription(battleLog.length > 1500 ? "..." + battleLog.slice(-1500) : battleLog)
                 .addFields(
-                    { name: `${myPet.emoji} ${myPet.name} (あなた)`, value: `❤️ HP: ${myState.hp}/${myPet.maxHp}\n💫 混乱: ${myState.stagger}/${myPet.staggerMax || 20}\n🧠 SP: ${myState.sp}`, inline: true },
+                    { name: `${myPet.emoji} ${myPet.name} (あなた)`, value: `❤️ HP: ${myState.hp}/${myPet.maxHp}\n💫 混乱: ${myState.stagger}/${oppPet.staggerMax || 20}\n🧠 SP: ${myState.sp}`, inline: true },
                     { name: `VS`, value: `⚡`, inline: true },
                     { name: `${oppPet.emoji} ${oppPet.name} (相手)`, value: `❤️ HP: ${oppState.hp}/${oppPet.maxHp}\n💫 混乱: ${oppState.stagger}/${oppPet.staggerMax || 20}\n🧠 SP: ${oppState.sp}`, inline: true }
                 )
                 .setFooter({ text: '※相手はオート防衛システムで応戦するちゅ！' });
+            
+            // 💡 追加：相手の画像をEmbedにセット！
+            if (oppAttachment) {
+                embed.setImage(`attachment://${oppAttachment.name}`); // 相手の画像をセットだちゅ
+            }
+            return embed;
         };
 
         const getActionRow = () => {
@@ -1395,13 +1458,16 @@ client.on('interactionCreate', async (interaction) => {
             );
         };
 
-        const message = await interaction.editReply({ embeds: [updateEmbed()], components: [getActionRow()] });
+        // 💡 修正：初期Replyにファイルをセットして画像を送信
+        let files = oppAttachment ? [oppAttachment] : [];
+        const message = await interaction.editReply({ embeds: [updateEmbed()], components: [getActionRow()], files: files });
+        
         const collector = message.createMessageComponentCollector({ filter: i => i.user.id === challengerId, time: 300000 });
 
         collector.on('collect', async i => {
             await i.deferUpdate();
+            // ... (アクション処理は元のまま)
             let myAction = i.customId;
-            
             let oppAction = 'btn_atk';
             if (oppState.sp >= 10 && Math.random() < 0.7) {
                 oppAction = 'btn_special';
@@ -1430,10 +1496,8 @@ client.on('interactionCreate', async (interaction) => {
                     let dmg = attackerState.atk + Math.floor(attackerState.sp / 3) + Math.floor(Math.random() * 4);
                     let actualDef = isEnemyDefending ? defenderState.def * 2 : defenderState.def;
                     dmg -= actualDef;
-
                     if (dmg < 1) dmg = 1;
                     if (isDefenderStaggered) dmg *= 2; 
-                    
                     defenderState.hp -= dmg;
                     defenderState.stagger -= dmg;
                     battleLog += `🗡️ ${attackerBase.name} の攻撃！ **${dmg}** のダメージ！\n`;
@@ -1443,18 +1507,16 @@ client.on('interactionCreate', async (interaction) => {
                 } else if (action === 'btn_sp') {
                     attackerState.sp = Math.min(attackerBase.maxSp || 15, attackerState.sp + 5);
                     battleLog += `🌀 ${attackerBase.name} は集中して、SPを高めたちゅ。\n`;
-                } 
-                else if (action === 'btn_special') {
+                } else if (action === 'btn_special') {
                     if (attackerState.sp >= 10) {
                         attackerState.sp -= 10;
                         let dmg = Math.floor(attackerState.atk * 2.5) + Math.floor(Math.random() * 6);
                         if (isDefenderStaggered) dmg *= 2; 
-                        
                         defenderState.hp -= dmg;
                         defenderState.stagger -= dmg;
                         battleLog += `💥 **必殺技炸裂！！** ${attackerBase.name} の限界突破の一撃！防御を貫通して **${dmg}** の大ダメージ！！\n`;
                     } else {
-                        battleLog += `💦 ${attackerBase.name} は大技を放とうとしたが、SPが足りず不発に終わった！\n`;
+                        battleLog += `💦 ${attackerBase.name} は大技を放ろうとしたが、SPが足りず不発に終わった！\n`;
                     }
                 }
             };
@@ -1477,14 +1539,16 @@ client.on('interactionCreate', async (interaction) => {
                 isGameOver = true;
                 collector.stop();
             } else {
-                await interaction.editReply({ embeds: [updateEmbed()], components: [getActionRow()] });
+                // 💡 修正：更新時もfilesを含める（画像をアタッチし続けるため）
+                await interaction.editReply({ embeds: [updateEmbed()], components: [getActionRow()], files: files });
             }
         });
 
         collector.on('end', async () => {
             if (!isGameOver) {
                 battleLog += `\n⏳ タイムアップ！勝負はつかなかったちゅ…。`;
-                return interaction.editReply({ embeds: [updateEmbed()], components: [] });
+                // 💡 修正：filesを含める
+                return interaction.editReply({ embeds: [updateEmbed()], components: [], files: files });
             }
 
             let winnerName = myState.hp > 0 ? interaction.user.username : opponentUser.username;
@@ -1513,7 +1577,8 @@ client.on('interactionCreate', async (interaction) => {
             }
 
             let aiCommentary = "実況を生成中だちゅ...";
-            await interaction.editReply({ embeds: [updateEmbed().addFields({ name: '🎙️ AI実況（生成中...）', value: aiCommentary })], components: [] });
+            // 💡 修正：AI生成中もfilesを含める
+            await interaction.editReply({ embeds: [updateEmbed().addFields({ name: '🎙️ AI実況（生成中...）', value: aiCommentary })], components: [], files: files });
 
             const promptLog = battleLog.length > 400 ? battleLog.slice(-400) : battleLog;
             const prompt = `あなたは「ねずみ」という名前の実況者です。以下のペットバトルのログとランク変動を読み、150文字以内で熱く、そしてヒリヒリする雰囲気で勝者を讃える実況をしてください。語尾は「ちゅ」にすること。\n\n勝者: ${winnerName}\nランク変動: ${rankMsg}\nログ: ${promptLog}`;
@@ -1528,7 +1593,7 @@ client.on('interactionCreate', async (interaction) => {
             const finalEmbed = updateEmbed();
             finalEmbed.addFields(
                 { name: '📊 ランク変動', value: rankMsg },
-                { name: '🎙️ しろねずみのAI実況', value: aiCommentary }
+                { name: '🎙️ ねずみのAI実況', value: aiCommentary }
             );
             
             if (myState.hp > 0) {
@@ -1536,9 +1601,9 @@ client.on('interactionCreate', async (interaction) => {
             }
             savePets();
 
-            await interaction.editReply({ embeds: [finalEmbed], components: [] });
+            // 💡 修正：最終結果もfilesを含める
+            await interaction.editReply({ embeds: [finalEmbed], components: [], files: files });
         });
-    
     }
     // interactionCreate の中に追加
     // 💡 【追加】/pet_ranking コマンド (ランキング表示)

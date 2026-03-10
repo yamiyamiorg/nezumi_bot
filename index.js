@@ -1359,7 +1359,7 @@ client.on('interactionCreate', async (interaction) => {
             let aiCommentary = "実況を生成中だちゅ...";
             await interaction.editReply({ embeds: [updateEmbed().addFields({ name: '🎙️ AI実況（生成中...）', value: aiCommentary })], components: [] });
 
-            const prompt = `あなたは「しろねずみ」という名前の実況者です。以下のペットバトルのログを読み、150文字以内で熱く、そして「death is salvation（死こそ救済）」というような少しダークでヒリヒリする裏路地のような雰囲気で勝者を讃える実況をしてください。語尾は「ちゅ」にすること。\n\n勝者: ${winnerName}\nログ: ${battleLog.slice(-500)}`;
+            const prompt = `あなたは「しろねずみ」という名前の実況者です。以下のペットバトルのログを読み、150文字以内で熱く、そして少しダークでヒリヒリする裏路地のような雰囲気で勝者を讃える実況をしてください。語尾は「ちゅ」にすること。\n\n勝者: ${winnerName}\nログ: ${battleLog.slice(-500)}`;
 
             try {
                 aiCommentary = await callLocalLLM(prompt);

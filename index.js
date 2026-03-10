@@ -539,10 +539,10 @@ function savePets() {
 
 // 最初の相棒候補（種族データ）
 const petSpecies = [
-    { name: 'ヒノネズミ', emoji: '🔥', baseHp: 25, baseAtk: 6, desc: '燃える闘志を持った熱いねずみ。' },
-    { name: 'ミズネズミ', emoji: '💧', baseHp: 30, baseAtk: 4, desc: 'マイペースでタフなねずみ。' },
-    { name: 'クサネズミ', emoji: '🌿', baseHp: 28, baseAtk: 5, desc: '自然を愛する優しいねずみ。' },
-    { name: 'エレキネズミ', emoji: '⚡', baseHp: 22, baseAtk: 7, desc: 'すばしっこくて攻撃力が高いねずみ。' }
+    { name: 'ヒノネズミ', emoji: '🔥', baseHp: 45, baseAtk: 8, baseDef: 3, baseSpd: 6, maxSp: 15, staggerMax: 20, desc: '燃える闘志を持った熱いねずみ。' },
+    { name: 'ミズネズミ', emoji: '💧', baseHp: 55, baseAtk: 5, baseDef: 6, baseSpd: 3, maxSp: 15, staggerMax: 25, desc: 'マイペースでタフなねずみ。' },
+    { name: 'クサネズミ', emoji: '🌿', baseHp: 50, baseAtk: 6, baseDef: 4, baseSpd: 4, maxSp: 20, staggerMax: 15, desc: '自然を愛する優しいねずみ。精神力が高い。' },
+    { name: 'エレキネズミ', emoji: '⚡', baseHp: 40, baseAtk: 9, baseDef: 2, baseSpd: 8, maxSp: 10, staggerMax: 15, desc: 'すばしっこくて攻撃力が高いねずみ。' }
 ];
 //****************************************************************************************コマンド処理・開始処理****************************************************************************************** */
 client.once('clientReady', async (c) => { // 💡 clientReadyを正しいreadyに修正しました
@@ -1204,82 +1204,180 @@ client.on('interactionCreate', async (interaction) => {
         await interaction.editReply({ embeds: [embed] });
     }
     // 💡 【追加】/pet_battle コマンド (PvPバトル)
+    // 💡 【超進化】/pet_battle コマンド (マッチ・混乱・SPシステム ＆ AI実況搭載)
     else if (interaction.commandName === 'pet_battle') {
         await interaction.deferReply();
         const challengerId = interaction.user.id;
         const opponentUser = interaction.options.getUser('opponent');
         const opponentId = opponentUser.id;
 
-        const myPet = userPets[challengerId];
-        const oppPet = userPets[opponentId];
+        let myPet = userPets[challengerId];
+        let oppPet = userPets[opponentId];
 
-        // 1. バトル前のチェック
-        if (!myPet) {
-            return interaction.editReply('あなたは相棒を持っていないちゅ！まずは `/pet_catch` で見つけるちゅ！🌱');
-        }
-        if (!oppPet) {
-            return interaction.editReply(`${opponentUser.username}さんはまだ相棒を持っていないみたいだちゅ…。`);
-        }
-        if (challengerId === opponentId) {
-            return interaction.editReply('自分自身とは戦えないちゅ！他の人を指名するちゅ！🐭💦');
-        }
+        if (!myPet) return interaction.editReply('あなたは相棒を持っていないちゅ！🌱');
+        if (!oppPet) return interaction.editReply(`${opponentUser.username}さんはまだ相棒を持っていないちゅ…。`);
+        if (challengerId === opponentId) return interaction.editReply('自分自身とは戦えないちゅ！🐭💦');
 
-        // 2. バトル準備！ (HPはバトル用のコピーを使うから、本当のHPは減らないちゅ)
-        let myHp = myPet.maxHp;
-        let oppHp = oppPet.maxHp;
-        let battleLog = "";
+        // 💡 互換性パッチ（古いデータに新しいパラメーターを追加）
+        const initStats = (pet) => {
+            pet.maxSp = pet.maxSp || 15;
+            pet.staggerMax = pet.staggerMax || 20;
+            pet.baseDef = pet.baseDef || 3;
+            pet.baseSpd = pet.baseSpd || 5;
+            return {
+                hp: pet.maxHp, stagger: pet.staggerMax, sp: 0,
+                atk: pet.atk, def: pet.baseDef, spd: pet.baseSpd
+            };
+        };
+
+        let myState = initStats(myPet);
+        let oppState = initStats(oppPet);
+        
         let turn = 1;
-        let winner = null;
+        let battleLog = "⚔️ **BATTLE START** ⚔️\n";
+        let isGameOver = false;
 
-        // 3. 決着がつくまで殴り合いループ！
-        while (myHp > 0 && oppHp > 0 && turn <= 15) {
-            // 先行（あなた）の攻撃
-            const myDmg = Math.floor(Math.random() * 4) + myPet.atk;
-            oppHp -= myDmg;
-            battleLog += `**[ターン${turn}]**\n💥 ${myPet.emoji} ${myPet.name} の攻撃！ ${oppPet.name} に **${myDmg}** のダメージ！\n`;
+        const updateEmbed = () => {
+            return new EmbedBuilder()
+                .setColor(0x8B0000) // ダークレッド
+                .setTitle(`🩸 死闘：${interaction.user.username} VS ${opponentUser.username} [ターン${turn}]`)
+                .setDescription(battleLog.length > 1500 ? "..." + battleLog.slice(-1500) : battleLog)
+                .addFields(
+                    { name: `${myPet.emoji} ${myPet.name} (あなた)`, value: `❤️ HP: ${myState.hp}/${myPet.maxHp}\n💫 混乱: ${myState.stagger}/${myPet.staggerMax}\n🧠 SP: ${myState.sp}`, inline: true },
+                    { name: `VS`, value: `⚡`, inline: true },
+                    { name: `${oppPet.emoji} ${oppPet.name} (相手)`, value: `❤️ HP: ${oppState.hp}/${oppPet.maxHp}\n💫 混乱: ${oppState.stagger}/${oppPet.staggerMax}\n🧠 SP: ${oppState.sp}`, inline: true }
+                )
+                .setFooter({ text: '※相手はオート防衛システムで応戦するちゅ！' });
+        };
 
-            if (oppHp <= 0) {
-                winner = 'challenger';
-                break;
+        const getActionRow = () => {
+            return new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('btn_atk').setLabel('🗡️ 攻撃 (マッチ)').setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId('btn_def').setLabel('🛡️ 防御 (混乱回復)').setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId('btn_sp').setLabel('🌀 精神集中 (SP上昇)').setStyle(ButtonStyle.Success)
+            );
+        };
+
+        const message = await interaction.editReply({ embeds: [updateEmbed()], components: [getActionRow()] });
+        const collector = message.createMessageComponentCollector({ filter: i => i.user.id === challengerId, time: 300000 });
+
+        collector.on('collect', async i => {
+            await i.deferUpdate();
+            let myAction = i.customId;
+            // 相手はランダム行動（攻撃確率高め）
+            const oppActions = ['btn_atk', 'btn_atk', 'btn_def', 'btn_sp'];
+            let oppAction = oppActions[Math.floor(Math.random() * oppActions.length)];
+
+            battleLog += `\n**【ターン${turn}】**\n`;
+
+            // 💡 状態異常（混乱）の処理
+            let myIsStaggered = myState.stagger <= 0;
+            let oppIsStaggered = oppState.stagger <= 0;
+
+            if (myIsStaggered) { battleLog += `⚠️ ${myPet.name} は混乱状態だ！行動できない！\n`; myAction = 'staggered'; myState.stagger = myPet.staggerMax; }
+            if (oppIsStaggered) { battleLog += `⚠️ ${oppPet.name} は混乱状態だ！行動できない！\n`; oppAction = 'staggered'; oppState.stagger = oppPet.staggerMax; }
+
+            // 💡 マッチ（競り合い）処理
+            if (myAction === 'btn_atk' && oppAction === 'btn_atk') {
+                // ダイスロール（SPが高いほど有利）
+                let myRoll = myState.atk + Math.floor(Math.random() * 6) + Math.floor(myState.sp / 3);
+                let oppRoll = oppState.atk + Math.floor(Math.random() * 6) + Math.floor(oppState.sp / 3);
+                
+                battleLog += `⚔️ **マッチ発生！** [あなた: ${myRoll} VS 相手: ${oppRoll}]\n`;
+                
+                if (myRoll >= oppRoll) {
+                    let dmg = myRoll - oppState.def;
+                    if (dmg < 1) dmg = 1;
+                    if (oppIsStaggered) dmg *= 2; // 混乱時はダメージ2倍
+                    oppState.hp -= dmg;
+                    oppState.stagger -= dmg;
+                    myState.sp = Math.min(myPet.maxSp, myState.sp + 3); // マッチ勝利でSP回復
+                    oppState.sp = Math.max(-10, oppState.sp - 3);
+                    battleLog += `✨ マッチ勝利！ ${oppPet.name} に **${dmg}** のダメージ！\n`;
+                } else {
+                    let dmg = oppRoll - myState.def;
+                    if (dmg < 1) dmg = 1;
+                    if (myIsStaggered) dmg *= 2;
+                    myState.hp -= dmg;
+                    myState.stagger -= dmg;
+                    oppState.sp = Math.min(oppPet.maxSp, oppState.sp + 3);
+                    myState.sp = Math.max(-10, myState.sp - 3);
+                    battleLog += `🩸 マッチ敗北… ${myPet.name} は **${dmg}** のダメージを受けた！\n`;
+                }
+            } else {
+                // 一方的な行動の処理
+                if (myAction === 'btn_atk') {
+                    let dmg = myState.atk + Math.floor(Math.random() * 4) - (oppAction === 'btn_def' ? oppState.def * 2 : oppState.def);
+                    if (dmg < 1) dmg = 1;
+                    if (oppIsStaggered) dmg *= 2;
+                    oppState.hp -= dmg;
+                    oppState.stagger -= dmg;
+                    battleLog += `🗡️ ${myPet.name} の一方攻撃！ **${dmg}** のダメージ！\n`;
+                } else if (myAction === 'btn_def') {
+                    myState.stagger = Math.min(myPet.staggerMax, myState.stagger + 10);
+                    battleLog += `🛡️ ${myPet.name} は防御の姿勢をとり、混乱ゲージを回復した。\n`;
+                } else if (myAction === 'btn_sp') {
+                    myState.sp = Math.min(myPet.maxSp, myState.sp + 5);
+                    battleLog += `🌀 ${myPet.name} は精神を集中し、SPを高めた。\n`;
+                }
+
+                if (oppAction === 'btn_atk') {
+                    let dmg = oppState.atk + Math.floor(Math.random() * 4) - (myAction === 'btn_def' ? myState.def * 2 : myState.def);
+                    if (dmg < 1) dmg = 1;
+                    if (myIsStaggered) dmg *= 2;
+                    myState.hp -= dmg;
+                    myState.stagger -= dmg;
+                    battleLog += `🗡️ ${oppPet.name} の強襲！ **${dmg}** のダメージを受けた！\n`;
+                } else if (oppAction === 'btn_def') {
+                    oppState.stagger = Math.min(oppPet.staggerMax, oppState.stagger + 10);
+                } else if (oppAction === 'btn_sp') {
+                    oppState.sp = Math.min(oppPet.maxSp, oppState.sp + 5);
+                }
             }
 
-            // 後攻（相手）の反撃
-            const oppDmg = Math.floor(Math.random() * 4) + oppPet.atk;
-            myHp -= oppDmg;
-            battleLog += `💢 ${oppPet.emoji} ${oppPet.name} の反撃！ ${myPet.name} に **${oppDmg}** のダメージ！\n\n`;
-
-            if (myHp <= 0) {
-                winner = 'opponent';
-                break;
-            }
             turn++;
-        }
 
-        // 4. 結果発表！
-        let resultMsg = "";
-        if (winner === 'challenger') {
-            resultMsg = `🎉 **勝者：${interaction.user.username} ＆ ${myPet.name}！！** 🎉\n見事な勝利だちゅ！`;
-            // 勝者にはボーナス経験値！
-            const bonusExp = 15;
-            myPet.exp += bonusExp;
-            savePets(); // ボーナスを得たからセーブするちゅ
-            resultMsg += `\n*(ボーナス経験値 +${bonusExp} EXPを獲得したちゅ！)*`;
-        } else if (winner === 'opponent') {
-            resultMsg = `💀 **勝者：${opponentUser.username} ＆ ${oppPet.name}！！** 💀\n無念の敗北だちゅ…。もっと特訓するちゅ！`;
-        } else {
-            resultMsg = `💦 **引き分け！** 💦\nお互いタフすぎるちゅ！タイムアップだちゅ！`;
-        }
+            // 勝敗判定
+            if (myState.hp <= 0 || oppState.hp <= 0) {
+                isGameOver = true;
+                collector.stop();
+            } else {
+                await interaction.editReply({ embeds: [updateEmbed()], components: [getActionRow()] });
+            }
+        });
 
-        // 文字数が多すぎるとエラーになるから、念のため少しカットするちゅ
-        const safeLog = battleLog.length > 2000 ? battleLog.substring(0, 2000) + "\n...（長すぎるから省略だちゅ！）" : battleLog;
+        collector.on('end', async () => {
+            if (!isGameOver) {
+                battleLog += `\n⏳ タイムアップ！勝負はつかなかったちゅ…。`;
+                return interaction.editReply({ embeds: [updateEmbed()], components: [] });
+            }
 
-        const embed = new EmbedBuilder()
-            .setColor(0xFF0000)
-            .setTitle(`⚔️ ペットバトル開始！ ${interaction.user.username} VS ${opponentUser.username}`)
-            .setDescription(`**${myPet.name}** (Lv.${myPet.level}) 🆚 **${oppPet.name}** (Lv.${oppPet.level})\n\n${safeLog}\n\n━━━━━━━━━━━━━━\n${resultMsg}`)
-            .setFooter({ text: '※バトルで減ったHPは自動で回復するちゅ！' });
+            let winnerName = myState.hp > 0 ? interaction.user.username : opponentUser.username;
+            battleLog += `\n\n💀 **決着！！ 勝者：${winnerName}** 💀\n`;
+            
+            // 💡 あなたのRTX 4070 (ローカルLLM) によるバトル実況生成！
+            let aiCommentary = "実況を生成中だちゅ...";
+            await interaction.editReply({ embeds: [updateEmbed().addFields({ name: '🎙️ AI実況（生成中...）', value: aiCommentary })], components: [] });
 
-        await interaction.editReply({ embeds: [embed] });
+            const prompt = `あなたは「しろねずみ」という名前の実況者です。以下のペットバトルのログを読み、150文字以内で熱く、そして「death is salvation（死こそ救済）」というような少しダークでヒリヒリする裏路地のような雰囲気で勝者を讃える実況をしてください。語尾は「ちゅ」にすること。\n\n勝者: ${winnerName}\nログ: ${battleLog.slice(-500)}`;
+
+            try {
+                aiCommentary = await callLocalLLM(prompt);
+            } catch (e) {
+                aiCommentary = "激しすぎる戦いで実況マイクが壊れちゃったちゅ！でも素晴らしい死闘だったちゅ！";
+            }
+
+            const finalEmbed = updateEmbed();
+            finalEmbed.addFields({ name: '🎙️ しろねずみのAI実況', value: aiCommentary });
+            
+            // 経験値ボーナス
+            if (myState.hp > 0) {
+                myPet.exp += 20;
+                savePets();
+            }
+
+            await interaction.editReply({ embeds: [finalEmbed], components: [] });
+        });
     }
 });
 

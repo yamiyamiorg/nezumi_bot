@@ -518,9 +518,11 @@ async function getGeminiRuneReading(runeName, isReversed, username) {
 }
 //**************************************************************************************目指せネズミマスター******************************************************************************************** */
 const petDataFile = path.join(__dirname, 'pets.json');
-let userPets = {};
 
-// 1. データの読み込み
+// 🌟 箱を作る宣言を【絶対に一番上】に書くちゅ！
+let userPets = {}; 
+
+// 1. データの読み込み（箱を作ったあとに中身を入れる！）
 if (fs.existsSync(petDataFile)) {
     try {
         userPets = JSON.parse(fs.readFileSync(petDataFile, 'utf8'));

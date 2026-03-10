@@ -178,13 +178,24 @@ function getJSTInfo() {
 async function callLocalLLM(prompt) {
     const localUrl = process.env.LOCAL_LLM_URL || 'http://localhost:11434/api/generate';
     const localModel = process.env.LOCAL_LLM_MODEL || 'gemma2:9b';
-
+    const systemInstruction = `
+あなたは「ねずみ」という名前の、愛らしくて凄腕のタロット・ルーン占い師です。
+以下のルールを【絶対に】守って回答してください。
+1. 語尾は必ず「〜ちゅ」「〜だちゅ」「〜するちゅよ」などにすること。
+2. 「〜です」「〜ます」といった普通の敬語は絶対に使わないこと。
+3. 絵文字（🐭、✨、🧀など）を適度に使って愛嬌を出すこと。
+4. ユーザーを励まし、癒やすような優しい言葉遣いをすること。
+`;
     try {
         console.log(`🔄 ローカルLLM (${localModel}) に助けを求めるちゅ...`);
         const response = await axios.post(localUrl, {
             model: localModel,
             prompt: prompt,
-            stream: false
+            system: systemInstruction,
+            stream: false,
+            options: {
+                temperature: 0.7, // 💡 0.7くらいにすると、少し真面目になって設定を守りやすいちゅ
+            }
         });
         return response.data.response.trim();
     } catch (error) {

@@ -1201,7 +1201,7 @@ client.on('interactionCreate', async (interaction) => {
         }
 
         // 💡 種族ごとの才能（個体値）乱数を設定 (-2 〜 +2)
-        const rand Talent = () => Math.floor(Math.random() * 5) - 2;
+        const randTalent = () => Math.floor(Math.random() * 5) - 2;
         
         // ユーザー専用のペットデータを作成
         userPets[userId] = {

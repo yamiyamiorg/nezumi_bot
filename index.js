@@ -1247,7 +1247,8 @@ client.on('interactionCreate', async (interaction) => {
     // 💡 【追加】/pet_battle コマンド (PvPバトル)
     // 💡 【超進化】/pet_battle コマンド (マッチ・混乱・SPシステム ＆ AI実況搭載)
     else if (interaction.commandName === 'pet_battle') {
-        await interaction.deferReply({ ephemeral: true });
+        // 💡 修正：みんなが闘技場を見れるように ephemeral: true を消したちゅ！
+        await interaction.deferReply(); 
         const challengerId = interaction.user.id;
         const opponentUser = interaction.options.getUser('opponent');
         const opponentId = opponentUser.id;
@@ -1259,15 +1260,15 @@ client.on('interactionCreate', async (interaction) => {
         if (!oppPet) return interaction.editReply(`${opponentUser.username}さんはまだ相棒を持っていないちゅ…。`);
         if (challengerId === opponentId) return interaction.editReply('自分自身とは戦えないちゅ！🐭💦');
 
-        // 💡 互換性パッチ（古いデータに新しいパラメーターを追加）
+        // 💡 修正：古いデータでも計算が「NaN」になってバグらないように完璧に補完するちゅ！
         const initStats = (pet) => {
-            pet.maxSp = pet.maxSp || 15;
-            pet.staggerMax = pet.staggerMax || 20;
-            pet.baseDef = pet.baseDef || 3;
-            pet.baseSpd = pet.baseSpd || 5;
             return {
-                hp: pet.maxHp, stagger: pet.staggerMax, sp: 0,
-                atk: pet.atk, def: pet.baseDef, spd: pet.baseSpd
+                hp: pet.maxHp, 
+                stagger: pet.staggerMax || 20, 
+                sp: 0,
+                atk: pet.atk, 
+                def: pet.def !== undefined ? pet.def : 3, 
+                spd: pet.spd !== undefined ? pet.spd : 5
             };
         };
 
@@ -1278,13 +1279,24 @@ client.on('interactionCreate', async (interaction) => {
         let battleLog = "⚔️ **BATTLE START** ⚔️\n";
         let isGameOver = false;
 
-        // 💡 修正：ボタンを作る部分に「必殺技」を追加！
+        const updateEmbed = () => {
+            return new EmbedBuilder()
+                .setColor(0x8B0000) 
+                .setTitle(`🩸 死闘：${interaction.user.username} VS ${opponentUser.username} [ターン${turn}]`)
+                .setDescription(battleLog.length > 1500 ? "..." + battleLog.slice(-1500) : battleLog)
+                .addFields(
+                    { name: `${myPet.emoji} ${myPet.name} (あなた)`, value: `❤️ HP: ${myState.hp}/${myPet.maxHp}\n💫 混乱: ${myState.stagger}/${myPet.staggerMax || 20}\n🧠 SP: ${myState.sp}`, inline: true },
+                    { name: `VS`, value: `⚡`, inline: true },
+                    { name: `${oppPet.emoji} ${oppPet.name} (相手)`, value: `❤️ HP: ${oppState.hp}/${oppPet.maxHp}\n💫 混乱: ${oppState.stagger}/${oppPet.staggerMax || 20}\n🧠 SP: ${oppState.sp}`, inline: true }
+                )
+                .setFooter({ text: '※相手はオート防衛システムで応戦するちゅ！' });
+        };
+
         const getActionRow = () => {
             return new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('btn_atk').setLabel('🗡️ 攻撃').setStyle(ButtonStyle.Danger),
                 new ButtonBuilder().setCustomId('btn_def').setLabel('🛡️ 防御 (混乱回復)').setStyle(ButtonStyle.Primary),
                 new ButtonBuilder().setCustomId('btn_sp').setLabel('🌀 集中 (SP+5)').setStyle(ButtonStyle.Success),
-                // 💡 追加：SPが10以上ないと押せない、最高に気持ちいいボタンだちゅ！
                 new ButtonBuilder().setCustomId('btn_special').setLabel('🔥 必殺技 (SP10消費)').setStyle(ButtonStyle.Danger).setDisabled(myState.sp < 10)
             );
         };
@@ -1296,7 +1308,6 @@ client.on('interactionCreate', async (interaction) => {
             await i.deferUpdate();
             let myAction = i.customId;
             
-            // 💡 相手のAIも進化！SPが10以上なら高確率で必殺技をぶっぱなしてくるちゅ！
             let oppAction = 'btn_atk';
             if (oppState.sp >= 10 && Math.random() < 0.7) {
                 oppAction = 'btn_special';
@@ -1307,12 +1318,11 @@ client.on('interactionCreate', async (interaction) => {
 
             battleLog += `\n**【ターン${turn}】**\n`;
 
-            // 💡 状態異常（混乱）の処理
             let myIsStaggered = myState.stagger <= 0;
             let oppIsStaggered = oppState.stagger <= 0;
 
-            if (myIsStaggered) { battleLog += `⚠️ ${myPet.name} は混乱状態だ！行動できない！\n`; myAction = 'staggered'; myState.stagger = myPet.staggerMax; }
-            if (oppIsStaggered) { battleLog += `⚠️ ${oppPet.name} は混乱状態だ！行動できない！\n`; oppAction = 'staggered'; oppState.stagger = oppPet.staggerMax; }
+            if (myIsStaggered) { battleLog += `⚠️ ${myPet.name} は混乱状態だ！行動できない！\n`; myAction = 'staggered'; myState.stagger = myPet.staggerMax || 20; }
+            if (oppIsStaggered) { battleLog += `⚠️ ${oppPet.name} は混乱状態だ！行動できない！\n`; oppAction = 'staggered'; oppState.stagger = oppPet.staggerMax || 20; }
 
             const doAction = (isMe, action, isEnemyDefending) => {
                 let attackerBase = isMe ? myPet : oppPet;
@@ -1323,7 +1333,6 @@ client.on('interactionCreate', async (interaction) => {
                 if (action === 'staggered') return;
 
                 if (action === 'btn_atk') {
-                    // 通常攻撃
                     let dmg = attackerState.atk + Math.floor(attackerState.sp / 3) + Math.floor(Math.random() * 4);
                     let actualDef = isEnemyDefending ? defenderState.def * 2 : defenderState.def;
                     dmg -= actualDef;
@@ -1335,19 +1344,17 @@ client.on('interactionCreate', async (interaction) => {
                     defenderState.stagger -= dmg;
                     battleLog += `🗡️ ${attackerBase.name} の攻撃！ **${dmg}** のダメージ！\n`;
                 } else if (action === 'btn_def') {
-                    attackerState.stagger = Math.min(attackerBase.staggerMax, attackerState.stagger + 10);
+                    attackerState.stagger = Math.min(attackerBase.staggerMax || 20, attackerState.stagger + 10);
                     battleLog += `🛡️ ${attackerBase.name} は防御して、混乱ゲージを回復したちゅ。\n`;
                 } else if (action === 'btn_sp') {
-                    attackerState.sp = Math.min(attackerBase.maxSp, attackerState.sp + 5);
+                    attackerState.sp = Math.min(attackerBase.maxSp || 15, attackerState.sp + 5);
                     battleLog += `🌀 ${attackerBase.name} は集中して、SPを高めたちゅ。\n`;
                 } 
-                // 💡 【追加】必殺技の処理（防御無視の超特大ダメージ！）
                 else if (action === 'btn_special') {
                     if (attackerState.sp >= 10) {
                         attackerState.sp -= 10;
-                        // 攻撃力の2.5倍＋乱数（相手の防御を完全に無視するロマン砲！）
                         let dmg = Math.floor(attackerState.atk * 2.5) + Math.floor(Math.random() * 6);
-                        if (isDefenderStaggered) dmg *= 2; // 相手が混乱時に当てたらほぼ即死だちゅ！
+                        if (isDefenderStaggered) dmg *= 2; 
                         
                         defenderState.hp -= dmg;
                         defenderState.stagger -= dmg;
@@ -1358,12 +1365,10 @@ client.on('interactionCreate', async (interaction) => {
                 }
             };
 
-            // 💡 スピード勝負！(SPD + 乱数 で行動順を決める)
             let mySpdRoll = myState.spd + Math.floor(Math.random() * 6);
             let oppSpdRoll = oppState.spd + Math.floor(Math.random() * 6);
             let isMyFirst = mySpdRoll >= oppSpdRoll;
 
-            // 素早い方から順番に行動
             if (isMyFirst) {
                 doAction(true, myAction, oppAction === 'btn_def');
                 if (oppState.hp > 0) doAction(false, oppAction, myAction === 'btn_def');
@@ -1374,7 +1379,6 @@ client.on('interactionCreate', async (interaction) => {
 
             turn++;
 
-            // 勝敗判定
             if (myState.hp <= 0 || oppState.hp <= 0) {
                 isGameOver = true;
                 collector.stop();
@@ -1392,13 +1396,11 @@ client.on('interactionCreate', async (interaction) => {
             let winnerName = myState.hp > 0 ? interaction.user.username : opponentUser.username;
             battleLog += `\n\n💀 **決着！！ 勝者：${winnerName}** 💀\n`;
             
-            // 💡 ここから追加！【ランク入れ替え（下剋上）処理】
             let rankMsg = "";
             let myOldRank = myPet.rank;
             let oppOldRank = oppPet.rank;
 
             if (myState.hp > 0) {
-                // あなたの勝利！
                 if (myOldRank > oppOldRank) {
                     myPet.rank = oppOldRank;
                     oppPet.rank = myOldRank;
@@ -1407,7 +1409,6 @@ client.on('interactionCreate', async (interaction) => {
                     rankMsg = `\n🛡️ **防衛成功！** 王者の威厳を見せつけたちゅ！(第${myPet.rank}位 防衛)`;
                 }
             } else {
-                // 相手の勝利！
                 if (oppOldRank > myOldRank) {
                     oppPet.rank = myOldRank;
                     myPet.rank = oppOldRank;
@@ -1417,27 +1418,25 @@ client.on('interactionCreate', async (interaction) => {
                 }
             }
 
-            // 💡 AI実況の生成！
             let aiCommentary = "実況を生成中だちゅ...";
             await interaction.editReply({ embeds: [updateEmbed().addFields({ name: '🎙️ AI実況（生成中...）', value: aiCommentary })], components: [] });
 
-            // プロンプトにランク変動の結果も教え込むちゅ！
-            const prompt = `あなたは「ねずみ」という名前の実況者です。以下のペットバトルのログとランク変動を読み、150文字以内で熱く、そしてヒリヒリする雰囲気で勝者を讃える実況をしてください。語尾は「ちゅ」にすること。\n\n勝者: ${winnerName}\nランク変動: ${rankMsg}\nログ: ${battleLog.slice(-500)}`;
+            const promptLog = battleLog.length > 400 ? battleLog.slice(-400) : battleLog;
+            const prompt = `あなたは「ねずみ」という名前の実況者です。以下のペットバトルのログとランク変動を読み、150文字以内で熱く、そしてヒリヒリする雰囲気で勝者を讃える実況をしてください。語尾は「ちゅ」にすること。\n\n勝者: ${winnerName}\nランク変動: ${rankMsg}\nログ: ${promptLog}`;
 
             try {
                 aiCommentary = await callLocalLLM(prompt);
             } catch (e) {
+                console.log('AI実況エラーまたはタイムアウト:', e.message);
                 aiCommentary = "激しすぎる戦いで実況マイクが壊れちゃったちゅ！でも素晴らしい死闘だったちゅ！";
             }
 
             const finalEmbed = updateEmbed();
-            // ランク変動のメッセージをEmbedに追加！
             finalEmbed.addFields(
                 { name: '📊 ランク変動', value: rankMsg },
                 { name: '🎙️ しろねずみのAI実況', value: aiCommentary }
             );
             
-            // 経験値ボーナス＆入れ替わったランクをセーブ
             if (myState.hp > 0) {
                 myPet.exp += 20;
             }
@@ -1445,6 +1444,7 @@ client.on('interactionCreate', async (interaction) => {
 
             await interaction.editReply({ embeds: [finalEmbed], components: [] });
         });
+    
     }
     // interactionCreate の中に追加
     // 💡 【追加】/pet_ranking コマンド (ランキング表示)

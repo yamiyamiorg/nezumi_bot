@@ -519,7 +519,7 @@ async function getGeminiRuneReading(runeName, isReversed, username) {
 
 
 //****************************************************************************************コマンド処理・開始処理****************************************************************************************** */
-client.once('ready', async (c) => { // 💡 clientReadyを正しいreadyに修正しました
+client.once('clientReady', async (c) => { // 💡 clientReadyを正しいreadyに修正しました
     console.log(`${c.user.tag} (ねずみタロット) がログインしました！🔮`);
 
     const data = [

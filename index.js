@@ -174,8 +174,8 @@ function getJSTInfo() {
 }
 
 // 💡 【追加】ローカルLLM（Ollama）を呼び出すヘルパー関数
+// 💡 【追加】ローカルLLM（Ollama）を呼び出すヘルパー関数
 async function callLocalLLM(prompt) {
-    // ngrokのURLなどが設定されていればそれを、なければlocalhostを使うちゅ！
     const localUrl = process.env.LOCAL_LLM_URL || 'http://localhost:11434/api/generate';
     const localModel = process.env.LOCAL_LLM_MODEL || 'gemma2:9b';
 
@@ -189,6 +189,12 @@ async function callLocalLLM(prompt) {
         return response.data.response.trim();
     } catch (error) {
         console.error('❌ ローカルLLMもダウンしてるちゅ:', error.message);
+        
+        // 💡 ここを追加！Ollamaの本当の文句（404の理由）をログに詳しく出すちゅ！
+        if (error.response && error.response.data) {
+            console.error('🔍 Ollamaの言い分:', error.response.data);
+        }
+        
         throw error; 
     }
 }

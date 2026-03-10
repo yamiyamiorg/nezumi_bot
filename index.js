@@ -874,45 +874,57 @@ else if (interaction.commandName === 'horoscope') {
 else if (interaction.commandName === 'rune') {
     await interaction.deferReply({ ephemeral: true });
 
-    // 1. 日付固定でルーンを引く
+    // 1. ルーン選定
     const personalSeed = getPersonalDailyRandom(interaction.user.id, 777);
     const runeIndex = Math.floor(personalSeed * runeAlphabet.length);
     const selectedRune = runeAlphabet[runeIndex];
 
-    // 2. 逆位置の判定（逆位置がない文字は強制的に正位置にする）
     const noReverseRunes = ['ᛗ', 'ᚷ', 'ᚹ', 'ᚻ', 'ᚾ', 'ᛁ', 'ᛃ', 'ᛇ', 'ᛊ', 'ᛝ', 'ᛞ'];
     let isReversed = getPersonalDailyRandom(interaction.user.id, 888) < 0.5;
     if (noReverseRunes.includes(selectedRune.symbol)) isReversed = false;
+
     const imagePath = path.join(__dirname, 'images', selectedRune.image);
+
     try {
-    const imageBuffer = await sharp(imagePath)
-            .resize(300, 300) // 300pxに圧縮（Discordで見やすく軽量）
-            .rotate(isReversed ? 180 : 0) // 逆位置なら180度回転
-            .webp({ quality: 75 }) // WebP形式にしてさらに軽量化
+        // 💡 2. 先に画像があるかチェック（sharpのエラーを未然に防ぐ）
+        if (!fs.existsSync(imagePath)) {
+            throw new Error(`FILE_NOT_FOUND: ${selectedRune.image}`);
+        }
+
+        const imageBuffer = await sharp(imagePath)
+            .resize(300, 300)
+            .rotate(isReversed ? 180 : 0)
+            .webp({ quality: 75 })
             .toBuffer();
-    const attachment = new AttachmentBuilder(imageBuffer, { name: 'rune.webp' });
-    // 3. Geminiに短い助言を依頼
-    const geminiMessage = await getGeminiRuneReading(selectedRune.name, isReversed, interaction.user.username);
+        
+        const attachment = new AttachmentBuilder(imageBuffer, { name: 'rune.webp' });
 
-    const embed = new EmbedBuilder()
-        .setColor(0x8B4513)
-        .setTitle(`ᚱ 今日のルーン：${selectedRune.symbol} ${selectedRune.name}`)
-        .setImage('attachment://rune.webp') // 圧縮画像を表示
-        .addFields(
-            { name: '象徴', value: selectedRune.meaning, inline: true },
-            { name: '向き', value: isReversed ? '逆位置 🙃' : '正位置 ✨', inline: true },
-            { name: '石に刻まれた意味', value: isReversed ? selectedRune.reversed : selectedRune.upright },
-            { name: 'ねずみのお告げ', value: geminiMessage } // ここがGemini担当
-        )
-        .setFooter({ text: `${new Date().toLocaleDateString()} の石の言葉だちゅ！` });
+        // 3. Geminiのアドバイス取得
+        const geminiMessage = await getGeminiRuneReading(selectedRune.name, isReversed, interaction.user.username);
 
-    await interaction.editReply({ 
-    embeds: [embed], 
-    files: [attachment] // 💡 これを忘れると画像が送信されないちゅ！
-});
+        const embed = new EmbedBuilder()
+            .setColor(0x8B4513)
+            .setTitle(`ᚱ 今日のルーン：${selectedRune.symbol} ${selectedRune.name}`)
+            .setImage('attachment://rune.webp')
+            .addFields(
+                { name: '象徴', value: selectedRune.meaning, inline: true },
+                { name: '向き', value: isReversed ? '逆位置 🙃' : '正位置 ✨', inline: true },
+                { name: '石に刻まれた意味', value: isReversed ? selectedRune.reversed : selectedRune.upright },
+                { name: 'ねずみのお告げ', value: geminiMessage }
+            )
+            .setFooter({ text: `${new Date().toLocaleDateString('ja-JP')} の石の言葉だちゅ！` });
+
+        await interaction.editReply({ embeds: [embed], files: [attachment] });
+
     } catch (error) {
-        console.error('Rune Image Error:', error);
-        await interaction.editReply('画像が見つからないか、読み込みに失敗しちゃったちゅ…。');
+        console.error('Rune Command Error:', error);
+        
+        // エラー内容によってメッセージを変えるちゅ
+        if (error.message.includes('FILE_NOT_FOUND')) {
+            await interaction.editReply(`画像（${selectedRune.image}）が images フォルダに見当たらないちゅ…。ファイル名を確認してちゅ！`);
+        } else {
+            await interaction.editReply('ルーンを読み取ろうとしたけど、何かがおかしいちゅ…。ログを確認してちゅ！');
+        }
     }
 }
 

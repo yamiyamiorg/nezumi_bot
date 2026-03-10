@@ -566,7 +566,7 @@ client.once('clientReady', async (c) => { // 💡 clientReadyを正しいready�
 
 //*******************************************************************************************メイン関数***************************************************************************************** */
 client.on('interactionCreate', async (interaction) => {
-    if (!interaction.isChatInputCommand()) return;
+    if (!interaction.isChatInputCommand() && !interaction.isStringSelectMenu() && !interaction.isButton()) return;
 
     if (interaction.commandName === 'tarot') {
         await interaction.deferReply({ ephemeral: true });

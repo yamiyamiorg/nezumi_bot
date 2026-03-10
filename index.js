@@ -18,7 +18,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // 💡 修正ポイント：モデル名をフルパス "models/gemini-1.5-flash" にします
 const model = genAI.getGenerativeModel(
-    { model: "models/gemini-2.5-flash" }, // 👈 "models/" を追加
+    { model: "models/gemini-2.0-flash-lite" }, // 👈 "models/" を追加
     { apiVersion: "v1" }
 );
 

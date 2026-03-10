@@ -898,7 +898,7 @@ client.on('interactionCreate', async (interaction) => {
         const embed = new EmbedBuilder()
             .setColor(0xFFA500)
             .setTitle('🍣 いらっしゃい！ねずみ寿司の大将だちゅ！')
-            .setDescription('ウチ自慢のネタを見てってちゅ！\n下のリストから選べば、握りたて（圧縮済み）の画像を出すちゅよ！🐭')
+            .setDescription('ウチ自慢のネタを見てってちゅ！\n下のリストから選べば、握りたての画像を出すちゅよ！🐭')
             .setFooter({ text: 'らっしゃいらっしゃいちゅ！' });
 
         if (daishoAttachment) {

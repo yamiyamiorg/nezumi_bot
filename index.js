@@ -161,7 +161,7 @@ const sushiMenu = [
     { name: '玉子 (2貫)', price: 200, image: 's_tamago.jpg', description: '大将特製。優しい甘さだちゅ。' },
     { name: 'イクラ軍艦 (2貫)', price: 1000, image: 's_ikura.jpg', description: 'プチプチ弾ける海の宝石だちゅ✨' },
     { name: 'ウニ軍艦 (1貫)', price: 1000, image: 's_uni.jpg', description: '口の中でとろける最高級品だちゅ！' },
-    { name: 'カッパ巻き (1本)', price: 200, image: 's_kappa.jpg', description: 'さっぱり箸休めに最適だちゅ。' },
+    { name: 'カッパ巻き (4本)', price: 200, image: 's_kappa.jpg', description: 'さっぱり箸休めに最適だちゅ。' },
 ];
 
 // 日本時間を取得する共通関数
@@ -873,7 +873,7 @@ client.on('interactionCreate', async (interaction) => {
         }
     }
     // 💡 【追加】/sushi_order コマンド (注文＆画像提示)
-    if (interaction.commandName === 'sushi_order') {
+    else if (interaction.commandName === 'sushi_order') {
         await interaction.deferReply({ ephemeral: true }); // epemeral指定
 
         // 1. 大将の画像を圧縮して取得

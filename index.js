@@ -3,38 +3,34 @@ const {
     GatewayIntentBits, 
     EmbedBuilder, 
     AttachmentBuilder,
-    ActionRowBuilder, // 💡 追加
-    ButtonBuilder,    // 💡 追加
-    ButtonStyle       // 💡 追加
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle
 } = require('discord.js');
 const axios = require('axios');
 const sharp = require('sharp');
 const path = require('path');
 const fs = require('fs');
 require('dotenv').config();
-// index.js の冒頭
+
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// 💡 修正ポイント：モデル名をフルパス "models/gemini-1.5-flash" にします
 const model = genAI.getGenerativeModel(
-    { model: "models/gemini-2.0-flash-lite" }, // 👈 "models/" を追加
+    { model: "models/gemini-2.0-flash-lite" },
     { apiVersion: "v1" }
 );
 
-
-// 💡 インテントの設定は、ここではなく「Client」を作る場所で行います
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildMessageReactions, // ⬅️ これでリアクションが検知可能になります！
+        GatewayIntentBits.GuildMessageReactions,
     ],
 });
 
-
-
+// --- タロット・ルーン等のデータ ---
 const tarotCards = [
     { name: '0. 愚者', tone: 'positive', upright: '自由、冒険、新しい始まり', reversed: '無計画、わがまま、不注意', image: '00_Fool.jpg' },
     { name: 'I. 魔術師', tone: 'positive', upright: '創造、才能、自信', reversed: '混迷、消極的、技術不足', image: '01_Magician.jpg' },
@@ -60,8 +56,7 @@ const tarotCards = [
     { name: 'XXI. 世界', tone: 'positive', upright: '完成、成功、完璧', reversed: '未完成、中途半端、スランプ', image: '21_World.jpg' }
 ];
 
-    // 主要都市の座標データ（例として一部抜粋）
-    const prefCoords = {
+const prefCoords = {
     '北海道': { lat: 43.06, lon: 141.35 }, '青森': { lat: 40.82, lon: 140.74 },
     '岩手': { lat: 39.70, lon: 141.15 }, '宮城': { lat: 38.27, lon: 140.87 },
     '秋田': { lat: 39.72, lon: 140.10 }, '山形': { lat: 38.26, lon: 140.36 },
@@ -86,7 +81,7 @@ const tarotCards = [
     '熊本': { lat: 32.79, lon: 130.74 }, '大分': { lat: 33.24, lon: 131.61 },
     '宮崎': { lat: 31.91, lon: 131.42 }, '鹿児島': { lat: 31.56, lon: 130.56 },
     '沖縄': { lat: 26.21, lon: 127.68 }
-    };
+};
 
 const extraImages = {
     mouse: [
@@ -128,12 +123,12 @@ const extraImages = {
         { file: 'not19_horinezumi.jpg', name: 'ホリネズミ' },
     ]
 };
-   const signs = [
+const signs = [
     '牡羊座', '牡牛座', '双子座', '蟹座', '獅子座', '乙女座', 
     '天秤座', '蠍座', '射手座', '山羊座', '水瓶座', '魚座'
 ];
 
-    const luckyItems = ['チーズ', 'ひまわりの種', '銀のさじ', '赤いリボン', '和歌山みかん', 'お気に入りの靴下']; 
+const luckyItems = ['チーズ', 'ひまわりの種', '銀のさじ', '赤いリボン', '和歌山みかん', 'お気に入りの靴下']; 
 const runeAlphabet = [
     { name: 'フェイヒュー (Fehu)', symbol: 'ᚠ', meaning: '富・家畜', upright: '金運上昇。努力が形になる時だちゅ！', reversed: '無駄遣いや損失に注意が必要だちゅ。' ,image: 'R_01_Fehu.jpg'},
     { name: 'ウルズ (Uruz)', symbol: 'ᚢ', meaning: '力・野生牛', upright: '強いエネルギーに満ちているちゅ！前進あるのみ。', reversed: '力が空回りしそう。休息も大事だちゅ。' ,image: 'R_02_Uruz.jpg'},
@@ -161,11 +156,9 @@ const runeAlphabet = [
     { name:'オサラ (Othala)', symbol:'ᛟ', meaning:'故郷・伝統', upright:'伝統や家族からの恩恵。基盤を固める時だちゅ。', reversed:'執着しすぎに注意。新しい風を取り入れてちゅ。' ,image:'R_24_Othala.jpg'}
 ];
 
-
 // 日本時間を取得する共通関数
 function getJSTInfo() {
     const now = new Date();
-    // タイムゾーンを指定して日本時間を計算
     const jstStr = now.toLocaleString("en-US", { timeZone: "Asia/Tokyo" });
     const jstDate = new Date(jstStr);
     
@@ -174,64 +167,63 @@ function getJSTInfo() {
     const d = jstDate.getDate();
     
     return {
-        dateStr: `${y}-${m}-${d}`, // キャッシュキー用 (2026-3-10)
-        displayDate: `${y}/${m}/${d}`, // 表示用 (2026/3/10)
-        seedDate: (y * 10000) + (m * 100) + d // 乱数シード用 (20260310)
+        dateStr: `${y}-${m}-${d}`,
+        displayDate: `${y}/${m}/${d}`,
+        seedDate: (y * 10000) + (m * 100) + d
     };
 }
 
+// 💡 【追加】ローカルLLM（Ollama）を呼び出すヘルパー関数
+async function callLocalLLM(prompt) {
+    // ngrokのURLなどが設定されていればそれを、なければlocalhostを使うちゅ！
+    const localUrl = process.env.LOCAL_LLM_URL || 'http://localhost:11434/api/generate';
+    const localModel = process.env.LOCAL_LLM_MODEL || 'gemma2:9b';
+
+    try {
+        console.log(`🔄 ローカルLLM (${localModel}) に助けを求めるちゅ...`);
+        const response = await axios.post(localUrl, {
+            model: localModel,
+            prompt: prompt,
+            stream: false
+        });
+        return response.data.response.trim();
+    } catch (error) {
+        console.error('❌ ローカルLLMもダウンしてるちゅ:', error.message);
+        throw error; 
+    }
+}
+
 //********************************************************************タロット*************************************************************************************************************
-// --- [追加] 画像をダウンロードして、必要なら反転させる関数 ---
 async function getCardImage(imageFileName, isReversed) {
     try {
         const imagePath = path.join(__dirname, 'images', imageFileName);
+        let imageProcessor = sharp(imagePath).resize(500);
+        if (isReversed) imageProcessor = imageProcessor.flip();
 
-        let imageProcessor = sharp(imagePath)
-            // 💡 1. リサイズする（幅500pxに固定し、高さは自動調整）
-            .resize(500);
-        
-        if (isReversed) {
-            imageProcessor = imageProcessor.flip();
-        }
-
-        // 💡 2. 圧縮設定（PNGのままでもいいですが、JPEGにすると劇的に軽くなります）
-        // png({ quality: 80 }) や jpeg({ quality: 80 }) を使います
-        // index.js の画像処理部分をさらに軽量化
-        const processedImageBuffer = await imageProcessor
-            .webp({ quality: 60 }) // 💡 WebPに変更し、画質を60%まで落とす（見た目はほぼ変わりません）
-            .toBuffer();
-
-        const filename = `n_${Math.floor(Math.random() * 1000)}.webp`; // 💡 拡張子も.webpに
+        const processedImageBuffer = await imageProcessor.webp({ quality: 60 }).toBuffer();
+        const filename = `n_${Math.floor(Math.random() * 1000)}.webp`;
         return new AttachmentBuilder(processedImageBuffer, { name: filename });
-
     } catch (error) {
         console.error('画像処理エラー:', error.message);
         return null; 
     }
 }
-// 💡 ユーザーIDと日付を組み合わせて、その人専用の「今日の乱数」を作る
-// 💡 修正後
+
 function getPersonalDailyRandom(userId, seedOffset = 0) {
-    const jst = getJSTInfo(); // 👈 ここを追加！
-    const dateNum = jst.seedDate; // 👈 ここも jst.seedDate に合わせる
-    
+    const jst = getJSTInfo();
+    const dateNum = jst.seedDate; 
     const userNumericId = parseInt(userId.slice(-8), 10); 
     const finalSeed = dateNum + userNumericId + seedOffset;
-
     const x = Math.sin(finalSeed) * 10000;
     return x - Math.floor(x);
 }
-// 1. スコア計算関数（パターンB：悪いカードの逆位置は緩和と捉える）
+
 function calculateScore(card, isReversed) {
-    if (card.tone === 'positive') {
-        return isReversed ? 1 : 2;  // 正位置：大吉(+2)、逆位置：停滞(+1)
-    } else if (card.tone === 'negative') {
-        return isReversed ? -1 : -2; // 正位置：凶(-2)、逆位置：緩和(-1)
-    } else {
-        return 0; // 中立
-    }
+    if (card.tone === 'positive') return isReversed ? 1 : 2;  
+    if (card.tone === 'negative') return isReversed ? -1 : -2; 
+    return 0; 
 }
-//* 2. メインの診断ロジック
+
 function generateTarotStory(past, present, future) {
     const s1 = calculateScore(past.card, past.isReversed);
     const s2 = calculateScore(present.card, present.isReversed);
@@ -241,7 +233,6 @@ function generateTarotStory(past, present, future) {
     let storyType = "";
     let message = "";
 
-    // 3. ねずみ風ストーリー判定
     if (s1 < s2 && s2 < s3) {
         if (s1 < 0) {
             storyType = "夜明け（V字回復） 🌅";
@@ -261,72 +252,59 @@ function generateTarotStory(past, present, future) {
             message = "周りがバタバタしてるけど、慌てちゃダメだよ。一歩ずつ、鼻をヒクヒクさせて慎重に進めば、きっと出口が見つかるからね。";
         }
     }
-
     return { storyType, totalScore, message };
 }
+
 function getSingleCardComment(card, isReversed) {
     if (!isReversed) {
-        // 正位置のとき
         if (card.tone === 'positive') return "わあ！とっても良いカードだね。今日は美味しいチーズに出会えるかも！ちゅ！";
         if (card.tone === 'negative') return "ちょっと怖いカードだけど、正位置なら「新しい出発」の意味もあるよ。鼻をヒクヒクさせて慎重に進もう！";
         return "落ち着いた運勢だね。たまには巣穴でゆっくり毛づくろいするのもいいと思うよ。";
     } else {
-        // 逆位置のとき
         if (card.tone === 'positive') return "せっかくの良い運勢がひっくり返っちゃった。焦らずに、ひまわりの種でも食べて落ち着いてね。";
         if (card.tone === 'negative') return "運気が逆転して、悪いことが去っていくサインかも！これからどんどん良くなるよ、ちゅ！";
         return "なんだかソワソワしちゃうね。深呼吸して、尻尾を落ち着かせてから行動しよう！";
     }
 }
-// 💡 Geminiに解説を依頼する関数（トークン節約版）
-async function getGeminiReading(cardName, isReversed, username) {
-    const orientation = isReversed ? "逆位置" : "正位置";
-    
-    // プロンプトは最小限に！
-    // 役割（しろねずみ）、対象（ユーザー名）、状況（カードと正逆）のみ
-    const prompt = `あなたは占い師の「ねずみ」です。${username}さんが引いたタロット「${cardName}」の${orientation}について、癒やしを与えつつ、100文字以内で短くアドバイスして。`;
 
-    try {
-        // ここでGemini APIを呼び出し（モデルは軽量な Gemini 1.5 Flash がおすすめ）
-        const result = await model.generateContent(prompt);
-        return result.response.text();
-    } catch (error) {
-        return "占いの言葉がうまくまとまらなかったちゅ…。でも、きっと大丈夫だちゅ！";
-    }
-}
-// 解説を一時保存するキャッシュ用変数
 const readingCache = new Map();
 
+// 💡 修正：Geminiが失敗したらローカルLLMに回すハイブリッド版
 async function getGeminiReading(cardName, isReversed, username) {
     const jst = getJSTInfo();
-    const dateStr = jst.dateStr; // 💡 日本時間の日付
+    const dateStr = jst.dateStr; 
     const cacheKey = `tarot-${dateStr}-${username}-${cardName}-${isReversed}`;
 
-    // 💡 節約ポイント：今日同じ人が同じカードを引いていたら、再生成せずにキャッシュを返す
     if (readingCache.has(cacheKey)) return readingCache.get(cacheKey);
 
     const orientation = isReversed ? "逆位置" : "正位置";
-    
-    // 💡 節約ポイント：プロンプトを極限まで短くし、Geminiに余計な出力をさせない
-    const prompt = `あなたは「しろねずみ」という占い師です。引かれたカード：${cardName}の${orientation}。50文字以内で、癒やしのアドバイスを1つだけ言って。語尾は「ちゅ」。`;
+    const prompt = `あなたは「ねずみ」という占い師です。引かれたカード：${cardName}の${orientation}。50文字以内で、癒やしのアドバイスを1つだけ言って。語尾は「ちゅ」。`;
 
     try {
         const result = await model.generateContent(prompt);
         const text = result.response.text().trim();
-        readingCache.set(cacheKey, text); // 結果を保存
+        readingCache.set(cacheKey, text); 
         return text;
     } catch (error) {
-        console.error('Gemini Error:', error);
-        return "占いの言葉がうまくまとまらなかったちゅ…。でも、きっと大丈夫だちゅ！";
+        console.error('⚠️ Gemini API Error (Tarot 1):', error.message);
+        try {
+            // 💡 ここでローカルAIにバトンタッチ！
+            const localText = await callLocalLLM(prompt);
+            readingCache.set(cacheKey, localText);
+            return localText;
+        } catch (localError) {
+            return "占いの言葉がうまくまとまらなかったちゅ…。でも、きっと大丈夫だちゅ！";
+        }
     }
 }
+
 async function getGeminiReading3(cards, username) {
     const jst = getJSTInfo();
-    const dateStr = jst.dateStr; // 💡 日本時間の日付
+    const dateStr = jst.dateStr; 
     const cacheKey = `tarot3-${dateStr}-${username}-${cards.map(c => c.name + c.isReversed).join('-')}`;
     
     if (readingCache.has(cacheKey)) return readingCache.get(cacheKey);
 
-    // 💡 節約ポイント：3枚の情報を1つの短いテキストにまとめる
     const cardInfo = cards.map((c, i) => 
         `${['過去', '現在', '未来'][i]}: ${c.name}(${c.isReversed ? '逆位置' : '正位置'})`
     ).join('、');
@@ -339,10 +317,18 @@ async function getGeminiReading3(cards, username) {
         readingCache.set(cacheKey, text);
         return text;
     } catch (error) {
-        console.error('Gemini Tarot3 Error:', error);
-        return "3枚の運命が複雑すぎて、しろねずみの頭がパンクしちゃったちゅ…。でも、どのカードもあなたを応援してるちゅ！";
+        console.error('⚠️ Gemini API Error (Tarot 3):', error.message);
+        try {
+            // 💡 ここでローカルAIにバトンタッチ！
+            const localText = await callLocalLLM(prompt);
+            readingCache.set(cacheKey, localText);
+            return localText;
+        } catch (localError) {
+            return "3枚の運命が複雑すぎて、ねずみの頭がパンクしちゃったちゅ…。でも、どのカードもあなたを応援してるちゅ！";
+        }
     }
 }
+
 //**********************************************************************************************ヒットアンドブロー********************************************************************************************** */
 
 function generateAnswer() {
@@ -364,9 +350,6 @@ function checkHitAndBlow(ans, gus) {
     return { hit, blow };
 }
 
-
-// Botのインスタンスを作成
-
 //*****************************************************************************天気予報********************************************************************************************************************* */
 function getWeatherStatus(code) {
     const codes = {
@@ -380,94 +363,54 @@ function getWeatherStatus(code) {
     };
     return codes[code] || '❓ 不明';
 }
+
 function getMouseComment(code, rainProb, maxTemp) {
-    // 1. 激しい天気の時 (雷雨や雪)
     if (code >= 95) return "ひえ〜っ、カミナリだ！おへそを隠して、安全なところでチーズを食べてよう... ⚡🧀";
     if (code >= 71) return "外は真っ白！雪合戦もいいけど、ねずみはコタツで丸くなりたいな ☃️❄️";
-
-    // 2. 雨の心配がある時
     if (rainProb >= 60) return "雨が降りそうだよ！傘を忘れずにね。ねずみが濡れたら、乾かすのが大変なんだ ☂️🐭";
     if (rainProb >= 30) return "空模様が怪しいかも... 念のために折りたたみ傘を持っていくのが正解だね ☁️🌂";
-
-    // 3. 気温に関するコメント
     if (maxTemp >= 32) return "暑すぎる〜！チーズが溶けてフォンデュになっちゃうよ。水分補給を忘れずにね！ 🔥💧";
     if (maxTemp <= 5) return "ぶるぶる... 今日はとっても寒いね。マフラーをしっかり巻いてお出かけしてね！ 🧣🧣";
-
-    // 4. 平穏な時
     if (code <= 1) return "最高のお出かけ日和！ねずみもどこかへ遊びに行きたい気分だよ ☀️🌷";
-    
     return "今日も一日、あなたにとって素敵な日になりますように！🐭✨";
 }
-//*******************************************************************************************ネズミクイズ*********************************************************************************************** */
-// --- [追加] ジョーク画像の軽量化処理 ---
-async function getJokeImage(fileName) {
-    // 💡 絶対パスを作成
-    const imagePath = path.resolve(__dirname, 'images', fileName);
 
-    // 💡 ファイルが存在するかチェック（ログに出す）
+//*******************************************************************************************ネズミクイズ*********************************************************************************************** */
+async function getJokeImage(fileName) {
+    const imagePath = path.resolve(__dirname, 'images', fileName);
     if (!fs.existsSync(imagePath)) {
-        console.log(`❌ ファイル不在: ${imagePath}`); // これが out.log に出るはず
+        console.log(`❌ ファイル不在: ${imagePath}`); 
         return null;
     }
-
     try {
-        // sharpで画像を読み込む
         const imageProcessor = sharp(imagePath);
-        
-        // 💡 [超軽量化] WebP形式に変換し、画質を60に設定
-        const processedImageBuffer = await imageProcessor
-            .webp({ quality: 60 }) 
-            .toBuffer();
-
-        // ランダムなファイル名を生成（キャッシュ対策）
+        const processedImageBuffer = await imageProcessor.webp({ quality: 60 }).toBuffer();
         const randomName = `j_${Math.floor(Math.random() * 1000)}.webp`;
-
-        // Discord用のAttachmentBuilderを作成
         return new AttachmentBuilder(processedImageBuffer, { name: randomName });
     } catch (error) {
         console.error(`❌ ジョーク画像の処理に失敗: ${error.message}`);
         return null;
     }
 }
+
 //*****************************************************************************************星座占い****************************************************************************************************** */
-// 💡 修正後
 function getDailyRandom(userId, seedOffset = 0) {
-    const jst = getJSTInfo(); // 👈 ここを追加！
+    const jst = getJSTInfo(); 
     const dateNum = jst.seedDate; 
-    
     const userNumericId = parseInt(userId.slice(-8), 10); 
     const finalSeed = dateNum + userNumericId + seedOffset;
-
     const x = Math.sin(finalSeed) * 10000;
     return x - Math.floor(x);
 }
-async function getGeminiHoroscopeMessage(topSign, bottomSign) {
-    const jst = getJSTInfo();
-    const dateStr = jst.dateStr; // 💡 日本時間の日付
-    const cacheKey = `full-horoscope-${dateStr}`;
-    
-    if (readingCache.has(cacheKey)) return readingCache.get(cacheKey);
 
-    // 💡 節約ポイント：1位と12位の情報だけ送り、50文字程度で生成させる
-    const prompt = `占い師「ねずみ」として、今日の星座占いで1位の${topSign}にお祝いを、12位の${bottomSign}に短い励ましを言って。合計60文字以内。語尾は「ちゅ」。`;
-
-    try {
-        const result = await model.generateContent(prompt);
-        const text = result.response.text().trim();
-        readingCache.set(cacheKey, text);
-        return text;
-    } catch (error) {
-        console.error('Gemini Horoscope Error:', error);
-        return "みんなに良いことがありますようにだちゅ！✨";
-    }
-}
+// 💡 修正：Geminiが失敗したらローカルLLMに回すハイブリッド版
 async function getGeminiFullHoroscope(rankingList) {
-    const dateStr = new Date().toLocaleDateString();
-    const cacheKey = `full-horoscope-${dateStr}`; // 1日1回だけ生成
+    const jst = getJSTInfo();
+    const dateStr = jst.dateStr;
+    const cacheKey = `full-horoscope-${dateStr}`; 
     
     if (readingCache.has(cacheKey)) return readingCache.get(cacheKey);
 
-    // 💡 節約ポイント：12星座の情報を1つのテキストにまとめ、一括で依頼
     const rankingInfo = rankingList.map((item, i) => `${i+1}位:${item.name}`).join('、');
     
     const prompt = `占い師「ねずみ」として、以下の星座ランキング各々に15文字以内で短い一言コメントを、最後に「今日の全体の抱負」を30文字以内で作成して。
@@ -482,20 +425,25 @@ async function getGeminiFullHoroscope(rankingList) {
     try {
         const result = await model.generateContent(prompt);
         const text = result.response.text().trim();
-        
-        // パースしやすいようにオブジェクト化して保存（簡易実装）
         readingCache.set(cacheKey, text);
         return text;
     } catch (error) {
-        console.error('Gemini Full Horoscope Error:', error);
-        return "みんなにとって素敵な一日になるちゅ！";
+        console.error('⚠️ Gemini API Error (Horoscope):', error.message);
+        try {
+            // 💡 ここでローカルAIにバトンタッチ！
+            const localText = await callLocalLLM(prompt);
+            readingCache.set(cacheKey, localText);
+            return localText;
+        } catch (localError) {
+            return "みんなにとって素敵な一日になるちゅ！\n抱負：みんなに良いことがありますようにちゅ！";
+        }
     }
 }
+
 //****************************************************************************************ルーン占い***************************************************************************************************** */
+// 💡 修正：Geminiが失敗したらローカルLLMに回すハイブリッド版
 async function getGeminiRuneReading(runeName, isReversed, username) {
-    // 💡 ここを追加！これがないと jst.dateStr が読めなくてエラーになるちゅ
     const jst = getJSTInfo(); 
-    
     const dateStr = jst.dateStr; 
     const cacheKey = `rune-${dateStr}-${username}-${runeName}-${isReversed}`;
     
@@ -510,57 +458,47 @@ async function getGeminiRuneReading(runeName, isReversed, username) {
         readingCache.set(cacheKey, text);
         return text;
     } catch (error) {
-        // 💡 ログを出して原因を突き止めやすくするちゅ
-        console.error('Gemini Rune API Error:', error); 
-        return "石に刻まれた文字が読めないちゅ…。でも運命は味方してるちゅ！";
+        console.error('⚠️ Gemini API Error (Rune):', error.message); 
+        try {
+            // 💡 ここでローカルAIにバトンタッチ！
+            const localText = await callLocalLLM(prompt);
+            readingCache.set(cacheKey, localText);
+            return localText;
+        } catch (localError) {
+            return "石に刻まれた文字が読めないちゅ…。でも運命は味方してるちゅ！";
+        }
     }
 }
 
 
 //****************************************************************************************コマンド処理・開始処理****************************************************************************************** */
-// 1. ログイン確認用のコードを追加（client.onの上に入れる）
-client.once('clientReady', async (c) => {
+client.once('ready', async (c) => { // 💡 clientReadyを正しいreadyに修正しました
     console.log(`${c.user.tag} (ねずみタロット) がログインしました！🔮`);
 
     const data = [
         { name: 'tarot', description: 'タロットカードを1枚引きます' },
         { name: 'tarot3', description: '3枚のカードで過去・現在・未来を占います' },
         {
-        name: 'hitandblow',
-        description: '4桁の数字当てゲームに挑戦！',
-        options: [{
-            name: 'guess',
-            type: 3, // STRING型
-            description: '4桁の数字を入力（例: 1234）',
-            required: true,
-        }]
-    },
-    {
-    name: 'weather',
-    description: '指定した都道府県の1週間（7日間）の天気を教えます',
-    options: [{
-        name: 'prefecture',
-        type: 3, // STRING
-        description: '都道府県名を漢字で入力（例: 和歌山, 東京）',
-        required: true,
-    }]
-    },
-    { name: 'mouse', description: '可愛いマウスの画像を表示するよ、ちゅ！' },
-    { name: 'rat', description: 'かっこいいラットの画像を表示するよ、ちゅ！' },
-    { name: 'nezumi', description: 'ねずみの画像……かな？' },
-    { name: 'quiz', description: 'この画像はねずみかな？クイズに挑戦！' },
-    { name: 'horoscope', description: '今日の星座運勢ランキングを表示するちゅ！' } ,// 💡 これを追加！
-    { name: 'rune', description: 'ルーン文字で今日の運勢を占います' },
+            name: 'hitandblow',
+            description: '4桁の数字当てゲームに挑戦！',
+            options: [{ name: 'guess', type: 3, description: '4桁の数字を入力（例: 1234）', required: true }]
+        },
+        {
+            name: 'weather',
+            description: '指定した都道府県の1週間（7日間）の天気を教えます',
+            options: [{ name: 'prefecture', type: 3, description: '都道府県名を漢字で入力（例: 和歌山, 東京）', required: true }]
+        },
+        { name: 'mouse', description: '可愛いマウスの画像を表示するよ、ちゅ！' },
+        { name: 'rat', description: 'かっこいいラットの画像を表示するよ、ちゅ！' },
+        { name: 'nezumi', description: 'ねずみの画像……かな？' },
+        { name: 'quiz', description: 'この画像はねずみかな？クイズに挑戦！' },
+        { name: 'horoscope', description: '今日の星座運勢ランキングを表示するちゅ！' },
+        { name: 'rune', description: 'ルーン文字で今日の運勢を占います' },
     ];
 
-    // 1. 拠点となるサーバーのIDを指定（ここにコピーしたIDを貼り付け）
     const guildIds = ['1450709451488100396','1455097564759330958']; 
-    const guild = client.guilds.cache.get(guildIds);
-
-   // 以前のグローバルコマンドが残っている場合は削除（混信を防ぐため）
     await client.application.commands.set([]);
 
-    // 各ギルドに対してループで登録
     for (const id of guildIds) {
         try {
             const guild = client.guilds.cache.get(id);
@@ -578,386 +516,298 @@ client.once('clientReady', async (c) => {
 });
 
 //*******************************************************************************************メイン関数***************************************************************************************** */
-// 2. メッセージ反応部分（全角スペースを除去し、構造を整理）
 client.on('interactionCreate', async (interaction) => {
     if (!interaction.isChatInputCommand()) return;
 
-    // --- 1枚引き (/tarot) ---
-	if (interaction.commandName === 'tarot') {
-    await interaction.deferReply({ ephemeral: true });
+    if (interaction.commandName === 'tarot') {
+        await interaction.deferReply({ ephemeral: true });
 
-    // 💡 ユーザーIDと日付に基づいた固定乱数を取得
-    const personalSeed = getPersonalDailyRandom(interaction.user.id);
-    
-    // カードの決定（日付とIDで固定）
-    const cardIndex = Math.floor(personalSeed * tarotCards.length);
-    const selectedCard = tarotCards[cardIndex];
+        const personalSeed = getPersonalDailyRandom(interaction.user.id);
+        const cardIndex = Math.floor(personalSeed * tarotCards.length);
+        const selectedCard = tarotCards[cardIndex];
 
-    // 正逆の決定（別のseedを使って固定）
-    const reverseSeed = getPersonalDailyRandom(interaction.user.id, 999);
-    const isReversed = reverseSeed < 0.5;
-
-    // 💡 消えていた「ささやき」コメントを取得
-    const mouseWhisper = getSingleCardComment(selectedCard, isReversed);
-    const geminiExplanation = await getGeminiReading(selectedCard.name, isReversed, interaction.user.id);
-
-    // 画像の生成（反転処理など）
-    const imageAttachment = await getCardImage(selectedCard.image, isReversed);
-
-    const embed = new EmbedBuilder()
-        .setColor(isReversed ? 0xFF6347 : 0x00FA9A)
-        .setTitle(`🐭 ${interaction.user.username}さんの今日のお告げ: ${selectedCard.name}`)
-        .setDescription(`**${isReversed ? '逆位置 🙃' : '正位置 ✨'}**`)
-        .addFields(
-            { name: 'カードの意味', value: isReversed ? selectedCard.reversed : selectedCard.upright },
-            // 💡 ここに「ささやき」を復活させました
-            { name: 'ねずみのささやき', value: `*「${mouseWhisper}」*` },
-            { name: 'ねずみの特別解説', value: geminiExplanation }
-        )
-        .setFooter({ text: `今日（${new Date().toLocaleDateString()}）のお告げはこれって決まってたんだちゅ！` });
-
-    if (imageAttachment) {
-        embed.setImage(`attachment://${imageAttachment.name}`);
-        await interaction.editReply({ embeds: [embed], files: [imageAttachment] });
-    } else {
-        await interaction.editReply({ embeds: [embed], content: '画像の読み込みに失敗しちゃった、ちゅ……。' });
-    }
-}
-
-	// --- 3枚引き (/tarot3) ---
-	else if (interaction.commandName === 'tarot3') {
-    await interaction.deferReply({ ephemeral: true });
-
-    const positions = ['過去 🕰️', '現在 📍', '未来 🚀'];
-    const drawnResults = []; 
-
-    // 💡 1. デッキのコピーを作成（元のデータは壊さない）
-    let tempDeck = [...tarotCards];
-
-    for (let i = 0; i < 3; i++) {
-        // 💡 2. シード計算（iを大きく離して影響を強める）
-        const personalSeed = getPersonalDailyRandom(interaction.user.id, (i + 1) * 777);
-        
-        // 💡 3. 現在のデッキの枚数に合わせてインデックスを決定
-        const cardIndex = Math.floor(personalSeed * tempDeck.length);
-        
-        // 💡 4. デッキからカードを抜き出す（spliceを使うと重複しなくなるちゅ！）
-        const card = tempDeck.splice(cardIndex, 1)[0];
-
-        const reverseSeed = getPersonalDailyRandom(interaction.user.id, (i + 1) * 999);
+        const reverseSeed = getPersonalDailyRandom(interaction.user.id, 999);
         const isReversed = reverseSeed < 0.5;
 
-        drawnResults.push({ name: card.name, isReversed: isReversed, card: card });
-
-        const imageAttachment = await getCardImage(card.image, isReversed);
+        const mouseWhisper = getSingleCardComment(selectedCard, isReversed);
+        const geminiExplanation = await getGeminiReading(selectedCard.name, isReversed, interaction.user.id);
+        const imageAttachment = await getCardImage(selectedCard.image, isReversed);
 
         const embed = new EmbedBuilder()
             .setColor(isReversed ? 0xFF6347 : 0x00FA9A)
-            .setTitle(`${positions[i]}: ${card.name}`)
-            .setDescription(`**${isReversed ? '逆位置 🙃' : '正位置 ✨'}**\n\n${isReversed ? card.reversed : card.upright}`);
+            .setTitle(`🐭 ${interaction.user.username}さんの今日のお告げ: ${selectedCard.name}`)
+            .setDescription(`**${isReversed ? '逆位置 🙃' : '正位置 ✨'}**`)
+            .addFields(
+                { name: 'カードの意味', value: isReversed ? selectedCard.reversed : selectedCard.upright },
+                { name: 'ねずみのささやき', value: `*「${mouseWhisper}」*` },
+                { name: 'ねずみの特別解説', value: geminiExplanation }
+            )
+            .setFooter({ text: `今日（${new Date().toLocaleDateString('ja-JP')}）のお告げはこれって決まってたんだちゅ！` });
 
         if (imageAttachment) {
             embed.setImage(`attachment://${imageAttachment.name}`);
-            await interaction.followUp({ embeds: [embed], files: [imageAttachment], ephemeral: true });
+            await interaction.editReply({ embeds: [embed], files: [imageAttachment] });
         } else {
-            await interaction.followUp({ embeds: [embed], content: '画像の読み込みに失敗しました。', ephemeral: true });
+            await interaction.editReply({ embeds: [embed], content: '画像の読み込みに失敗しちゃった、ちゅ……。' });
         }
     }
 
-    // 💡 あとの Gemini 連携やストーリー表示はそのまま！
-    const geminiExplanation = await getGeminiReading3(drawnResults, interaction.user.username);
-    const storyResult = generateTarotStory(drawnResults[0], drawnResults[1], drawnResults[2]);
+    else if (interaction.commandName === 'tarot3') {
+        await interaction.deferReply({ ephemeral: true });
 
-    const storyEmbed = new EmbedBuilder()
-        .setColor(0x5865F2)
-        .setTitle(`📖 あなたの物語: ${storyResult.storyType}`)
-        .setDescription(storyResult.message)
-        .addFields({ 
-            name: '🐭 ねずみの統合リーディング', 
-            value: geminiExplanation || "運命の糸が絡まってうまく読めなかったちゅ…。"
-        })
-        .setFooter({ text: `今日（${new Date().toLocaleDateString()}）の運命だちゅ！` });
+        const positions = ['過去 🕰️', '現在 📍', '未来 🚀'];
+        const drawnResults = []; 
+        let tempDeck = [...tarotCards];
 
-    await interaction.followUp({ embeds: [storyEmbed], ephemeral: true });
-}
+        for (let i = 0; i < 3; i++) {
+            const personalSeed = getPersonalDailyRandom(interaction.user.id, (i + 1) * 777);
+            const cardIndex = Math.floor(personalSeed * tempDeck.length);
+            const card = tempDeck.splice(cardIndex, 1)[0];
+
+            const reverseSeed = getPersonalDailyRandom(interaction.user.id, (i + 1) * 999);
+            const isReversed = reverseSeed < 0.5;
+
+            drawnResults.push({ name: card.name, isReversed: isReversed, card: card });
+            const imageAttachment = await getCardImage(card.image, isReversed);
+
+            const embed = new EmbedBuilder()
+                .setColor(isReversed ? 0xFF6347 : 0x00FA9A)
+                .setTitle(`${positions[i]}: ${card.name}`)
+                .setDescription(`**${isReversed ? '逆位置 🙃' : '正位置 ✨'}**\n\n${isReversed ? card.reversed : card.upright}`);
+
+            if (imageAttachment) {
+                embed.setImage(`attachment://${imageAttachment.name}`);
+                await interaction.followUp({ embeds: [embed], files: [imageAttachment], ephemeral: true });
+            } else {
+                await interaction.followUp({ embeds: [embed], content: '画像の読み込みに失敗しました。', ephemeral: true });
+            }
+        }
+
+        const geminiExplanation = await getGeminiReading3(drawnResults, interaction.user.username);
+        const storyResult = generateTarotStory(drawnResults[0], drawnResults[1], drawnResults[2]);
+
+        const storyEmbed = new EmbedBuilder()
+            .setColor(0x5865F2)
+            .setTitle(`📖 あなたの物語: ${storyResult.storyType}`)
+            .setDescription(storyResult.message)
+            .addFields({ 
+                name: '🐭 ねずみの統合リーディング', 
+                value: geminiExplanation || "運命の糸が絡まってうまく読めなかったちゅ…。"
+            })
+            .setFooter({ text: `今日（${new Date().toLocaleDateString('ja-JP')}）の運命だちゅ！` });
+
+        await interaction.followUp({ embeds: [storyEmbed], ephemeral: true });
+    }
 
     else if (interaction.commandName === 'hitandblow') {
-    await interaction.deferReply({ ephemeral: true });
-
-    const guess = interaction.options.getString('guess');
-    
-    // 💡 本来はサーバーごとに正解を保持すべきですが、
-    // まずは「実行するたびに正解が変わる1回勝負モード」で作ってみます。
-    const answer = generateAnswer(); 
-    const result = checkHitAndBlow(answer, guess);
-
-    const embed = new EmbedBuilder()
-        .setColor(result.hit === 4 ? 0xFFD700 : 0x0099FF)
-        .setTitle('🔢 ヒットアンドブローの結果')
-        .setDescription(`あなたの予想: **${guess}**`)
-        .addFields(
-            { name: '結果', value: `**${result.hit}** Hit / **${result.blow}** Blow`, inline: true },
-            { name: '判定', value: result.hit === 4 ? '🎉 チーズの匂いがする！' : '何も落ちてないみたい...' }
-        )
-        .setFooter({ text: '※1回ごとに正解が変わるモードです。' });
-
-    await interaction.editReply({ embeds: [embed] ,ephemeral: true });
-    }
-
-    //*
-    else if (interaction.commandName === 'weather') {
-    await interaction.deferReply({ ephemeral: true });
-    const pref = interaction.options.getString('prefecture');
-
-
-
-    const target = prefCoords[pref.replace(/都|道|府|県/g, '')]; // 「県」などを抜いても動くように
-
-    if (!target) {
-        return interaction.editReply('その都道府県の座標データが見つかりませんでした。',{ ephemeral: true});
-    }
-
-    try {
-        const url = `https://api.open-meteo.com/v1/forecast?latitude=${target.lat}&longitude=${target.lon}&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=Asia%2FTokyo`;
-        const response = await axios.get(url);
-        const daily = response.data.daily;
+        await interaction.deferReply({ ephemeral: true });
+        const guess = interaction.options.getString('guess');
+        const answer = generateAnswer(); 
+        const result = checkHitAndBlow(answer, guess);
 
         const embed = new EmbedBuilder()
-            .setColor(0x0099FF)
-            .setTitle(`☀️ ${pref}の1週間予報`)
-            .setDescription('ねずみが空模様を調べてきました！🐭');
-
-        // 7日分のデータをループで追加
-        for (let i = 0; i < 7; i++) {
-        const code = daily.weathercode[i];
-        const rainProb = daily.precipitation_probability_max[i];
-        const maxTemp = daily.temperature_2m_max[i];
-        const minTemp = daily.temperature_2m_min[i];
-    
-        const weatherStatus = getWeatherStatus(code);
-        // 💡 ここで「ねずみの一言」を取得
-        const mouseComment = getMouseComment(code, rainProb, maxTemp);
-
-        embed.addFields({ 
-            name: `📅 ${daily.time[i]}`, 
-            // 💡 一言をメッセージに含める
-            value: `${weatherStatus}\n💧 降水確率: ${rainProb}%\n🌡️ ${maxTemp}℃ / ${minTemp}℃\n💬 *${mouseComment}*`, 
-            inline: false // 一言が長いので、inline: false（縦並び）の方が見やすいかもしれません
-        });     
-    }
-
-        await interaction.editReply({ embeds: [embed]  ,ephemeral: true});
-    } catch (error) {
-        await interaction.editReply('天気情報の取得に失敗しました。',{ ephemeral: true});
-    }
-}
-// --- 隠しコマンド: mouse / rat / nezumi ---
-if (['mouse', 'rat', 'nezumi'].includes(interaction.commandName)) {
-    await interaction.deferReply({ ephemeral: true });
-
-    let selectedList = [];
-    let titleMsg = "";
-
-    if (interaction.commandName === 'mouse') {
-        selectedList = extraImages.mouse;
-        titleMsg = '🐭 可愛いねずみが見つかったよ！';
-    } else if (interaction.commandName === 'rat') {
-        selectedList = extraImages.rat;
-        titleMsg = '🐀 かっこいいラットが登場だちゅ！';
-    } else if (interaction.commandName === 'nezumi') {
-        selectedList = extraImages.not_mouse;
-        titleMsg = '🤔 これ……ねずみなのかなぁ……？';
-    }
-
-    // 💡 ランダムにオブジェクトを選択
-    const chosen = selectedList[Math.floor(Math.random() * selectedList.length)];
-    
-    // 💡 [修正] 以前の直接ファイル読み込みを止め、新しい関数を呼び出す
-    const attachment = await getJokeImage(chosen.file);
-    
-    if (attachment) {
-        // 💡 [修正] AttachmentBuilderのname属性（WebP）を使うようにEmbedを調整
-        const embed = new EmbedBuilder()
-            .setColor(0x00AE86)
-            .setTitle(titleMsg)
-            .setDescription(`この子の名前は **${chosen.name}** だちゅ！`)
-            .setImage(`attachment://${attachment.name}`); // 💡 生成されたファイル名を指定
-
-        await interaction.editReply({ embeds: [embed], files: [attachment], ephemeral: true });
-    } else {
-        await interaction.editReply({ content: 'ごめんね、その子は今お散歩中みたいだちゅ……。', ephemeral: true });
-    }
-}
-else if (interaction.commandName === 'quiz') {
-    await interaction.deferReply({ ephemeral: true });
-
-    // 1. 正解のカテゴリを決定 (50:50)
-    const isNezumi = Math.random() < 0.5;
-    let category = isNezumi ? (Math.random() < 0.5 ? 'mouse' : 'rat') : 'not_mouse';
-    const chosen = extraImages[category][Math.floor(Math.random() * extraImages[category].length)];
-
-    // 2. 画像の取得
-    const attachment = await getJokeImage(chosen.file);
-    if (!attachment) return interaction.editReply({ content: '画像がお散歩中で見つからないちゅ…。', ephemeral: true });
-
-    // 3. ボタンとEmbedの作成
-    const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('correct_nezumi').setLabel('ねずみだちゅ！').setEmoji('🐭').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId('incorrect_nezumi').setLabel('ねずみじゃない！').setEmoji('❌').setStyle(ButtonStyle.Danger)
-    );
-
-    const embed = new EmbedBuilder()
-        .setColor(0xFFA500)
-        .setTitle('❓ ねずみクイズ！')
-        .setDescription('この画像の子は「ねずみ」かな？\n下のボタンを押して答えてね！')
-        .setImage(`attachment://${attachment.name}`);
-
-    const response = await interaction.editReply({ 
-        embeds: [embed], 
-        files: [attachment], 
-        components: [row],
-        ephemeral: true
-    });
-
-    // 💡 【重要】フィルターの定義を追加
-    // これがないと、Botは誰のクリックに反応すべきか分からず無視してしまいます。
-    const filter = i => i.user.id === interaction.user.id;
-
-    try {
-        // 4. ボタン入力を待機
-        const confirmation = await response.awaitMessageComponent({ filter, time: 30000 });
-
-        const userChoice = (confirmation.customId === 'correct_nezumi');
-        const isCorrect = (userChoice === isNezumi);
-
-        const resultEmbed = new EmbedBuilder()
-            .setColor(isCorrect ? 0x00FF00 : 0xFF0000)
-            .setTitle(isCorrect ? '✨ 正解だちゅ！' : 'あちゃ〜、残念だちゅ…')
-            .setDescription(`この子の正体は **${chosen.name}** でした！`)
-            .setFooter({ text: isCorrect ? 'ねずみマスターだね！' : '次は当ててみてね！' });
-
-        // 結果を反映して終了
-        await confirmation.update({ 
-            content: isCorrect ? '🎊 おめでとう！' : '😢 どんまいだちゅ…',
-            embeds: [resultEmbed], 
-            components: [], 
-            ephemeral: true 
-        });
-
-    } catch (e) {
-        // タイムアウトまたはエラー時の処理
-        await interaction.editReply({ 
-            content: '時間切れだちゅ…。また遊んでね！', 
-            components: [], 
-            ephemeral: true 
-        });
-    }
-}
-else if (interaction.commandName === 'horoscope') {
-    await interaction.deferReply({ ephemeral: true });
-
-    // 1. 各星座のスコア計算（日付固定）
-    const ranking = signs.map((name, index) => {
-        const score = Math.floor(getDailyRandom(index) * 100) + 1;
-        const itemIdx = Math.floor(getDailyRandom(index + 100) * luckyItems.length);
-        return { name, score, luckyItem: luckyItems[itemIdx] };
-    });
-    ranking.sort((a, b) => b.score - a.score);
-
-    // 💡 2. Geminiに全順位のコメントと抱負を一括依頼
-    const fullMessage = await getGeminiFullHoroscope(ranking);
-    
-    // Geminiの回答から「抱負」部分を抽出
-    const lines = fullMessage.split('\n');
-    const houfu = lines.find(l => l.includes('抱負'))?.replace('抱負：', '') || "楽しく過ごそうちゅ！";
-
-    const embed = new EmbedBuilder()
-        .setColor(0xFFD700)
-        .setTitle(`🐭 ねずみ星座占い（${new Date().toLocaleDateString()}）`)
-        .setDescription(`**✨ 今日の抱負 ✨**\n「${houfu}」`)
-        .setThumbnail('https://path-to-your-white-mouse-icon.png');
-
-    // 3. 各順位を表示（上位3位は詳細、4位以下はリスト）
-    ranking.forEach((item, i) => {
-        const medal = i === 0 ? '🥇 ' : i === 1 ? '🥈 ' : i === 2 ? '🥉 ' : `第${i+1}位: `;
-        // Geminiの回答行からその順位のコメントを探す
-        const comment = lines.find(l => l.startsWith(`${i+1}位`))?.split('：')[1] || "応援してるちゅ！";
-
-        if (i < 3) {
-            // 上位3位は豪華に
-            embed.addFields({ 
-                name: `${medal}${item.name} (${item.score}点)`, 
-                value: `💬 ${comment}\n🎁 アイテム: \`${item.luckyItem}\`` 
-            });
-        } else {
-            // 4位以下は少しコンパクトに
-            embed.addFields({ 
-                name: `${medal}${item.name}`, 
-                value: `💬 ${comment}`,
-                inline: true // 横に並べてトークン（表示領域）を節約
-            });
-        }
-    });
-
-    await interaction.editReply({ embeds: [embed], ephemeral: true });
-}
-else if (interaction.commandName === 'rune') {
-    await interaction.deferReply({ ephemeral: true });
-
-    // 1. ルーン選定
-    const personalSeed = getPersonalDailyRandom(interaction.user.id, 777);
-    const runeIndex = Math.floor(personalSeed * runeAlphabet.length);
-    const selectedRune = runeAlphabet[runeIndex];
-
-    const noReverseRunes = ['ᛗ', 'ᚷ', 'ᚹ', 'ᚻ', 'ᚾ', 'ᛁ', 'ᛃ', 'ᛇ', 'ᛊ', 'ᛝ', 'ᛞ'];
-    let isReversed = getPersonalDailyRandom(interaction.user.id, 888) < 0.5;
-    if (noReverseRunes.includes(selectedRune.symbol)) isReversed = false;
-
-    const imagePath = path.join(__dirname, 'images', selectedRune.image);
-
-    try {
-        // 💡 2. 先に画像があるかチェック（sharpのエラーを未然に防ぐ）
-        if (!fs.existsSync(imagePath)) {
-            throw new Error(`FILE_NOT_FOUND: ${selectedRune.image}`);
-        }
-
-        const imageBuffer = await sharp(imagePath)
-            .resize(300, 300)
-            .rotate(isReversed ? 180 : 0)
-            .webp({ quality: 75 })
-            .toBuffer();
-        
-        const attachment = new AttachmentBuilder(imageBuffer, { name: 'rune.webp' });
-
-        // 3. Geminiのアドバイス取得
-        const geminiMessage = await getGeminiRuneReading(selectedRune.name, isReversed, interaction.user.username);
-
-        const embed = new EmbedBuilder()
-            .setColor(0x8B4513)
-            .setTitle(`ᚱ 今日のルーン：${selectedRune.symbol} ${selectedRune.name}`)
-            .setImage('attachment://rune.webp')
+            .setColor(result.hit === 4 ? 0xFFD700 : 0x0099FF)
+            .setTitle('🔢 ヒットアンドブローの結果')
+            .setDescription(`あなたの予想: **${guess}**`)
             .addFields(
-                { name: '象徴', value: selectedRune.meaning, inline: true },
-                { name: '向き', value: isReversed ? '逆位置 🙃' : '正位置 ✨', inline: true },
-                { name: '石に刻まれた意味', value: isReversed ? selectedRune.reversed : selectedRune.upright },
-                { name: 'ねずみのお告げ', value: geminiMessage }
+                { name: '結果', value: `**${result.hit}** Hit / **${result.blow}** Blow`, inline: true },
+                { name: '判定', value: result.hit === 4 ? '🎉 チーズの匂いがする！' : '何も落ちてないみたい...' }
             )
-            .setFooter({ text: `${new Date().toLocaleDateString('ja-JP')} の石の言葉だちゅ！` });
+            .setFooter({ text: '※1回ごとに正解が変わるモードです。' });
 
-        await interaction.editReply({ embeds: [embed], files: [attachment] });
+        await interaction.editReply({ embeds: [embed] ,ephemeral: true });
+    }
 
-    } catch (error) {
-        console.error('Rune Command Error:', error);
-        
-        // エラー内容によってメッセージを変えるちゅ
-        if (error.message.includes('FILE_NOT_FOUND')) {
-            await interaction.editReply(`画像（${selectedRune.image}）が images フォルダに見当たらないちゅ…。ファイル名を確認してちゅ！`);
-        } else {
-            await interaction.editReply('ルーンを読み取ろうとしたけど、何かがおかしいちゅ…。ログを確認してちゅ！');
+    else if (interaction.commandName === 'weather') {
+        await interaction.deferReply({ ephemeral: true });
+        const pref = interaction.options.getString('prefecture');
+        const target = prefCoords[pref.replace(/都|道|府|県/g, '')]; 
+
+        if (!target) {
+            return interaction.editReply('その都道府県の座標データが見つかりませんでした。',{ ephemeral: true});
+        }
+
+        try {
+            const url = `https://api.open-meteo.com/v1/forecast?latitude=${target.lat}&longitude=${target.lon}&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=Asia%2FTokyo`;
+            const response = await axios.get(url);
+            const daily = response.data.daily;
+
+            const embed = new EmbedBuilder()
+                .setColor(0x0099FF)
+                .setTitle(`☀️ ${pref}の1週間予報`)
+                .setDescription('ねずみが空模様を調べてきました！🐭');
+
+            for (let i = 0; i < 7; i++) {
+                const code = daily.weathercode[i];
+                const rainProb = daily.precipitation_probability_max[i];
+                const maxTemp = daily.temperature_2m_max[i];
+                const minTemp = daily.temperature_2m_min[i];
+            
+                const weatherStatus = getWeatherStatus(code);
+                const mouseComment = getMouseComment(code, rainProb, maxTemp);
+
+                embed.addFields({ 
+                    name: `📅 ${daily.time[i]}`, 
+                    value: `${weatherStatus}\n💧 降水確率: ${rainProb}%\n🌡️ ${maxTemp}℃ / ${minTemp}℃\n💬 *${mouseComment}*`, 
+                    inline: false 
+                });     
+            }
+            await interaction.editReply({ embeds: [embed]  ,ephemeral: true});
+        } catch (error) {
+            await interaction.editReply('天気情報の取得に失敗しました。',{ ephemeral: true});
         }
     }
-}
 
+    if (['mouse', 'rat', 'nezumi'].includes(interaction.commandName)) {
+        await interaction.deferReply({ ephemeral: true });
+        let selectedList = [];
+        let titleMsg = "";
+
+        if (interaction.commandName === 'mouse') {
+            selectedList = extraImages.mouse;
+            titleMsg = '🐭 可愛いねずみが見つかったよ！';
+        } else if (interaction.commandName === 'rat') {
+            selectedList = extraImages.rat;
+            titleMsg = '🐀 かっこいいラットが登場だちゅ！';
+        } else if (interaction.commandName === 'nezumi') {
+            selectedList = extraImages.not_mouse;
+            titleMsg = '🤔 これ……ねずみなのかなぁ……？';
+        }
+
+        const chosen = selectedList[Math.floor(Math.random() * selectedList.length)];
+        const attachment = await getJokeImage(chosen.file);
+        
+        if (attachment) {
+            const embed = new EmbedBuilder()
+                .setColor(0x00AE86)
+                .setTitle(titleMsg)
+                .setDescription(`この子の名前は **${chosen.name}** だちゅ！`)
+                .setImage(`attachment://${attachment.name}`); 
+            await interaction.editReply({ embeds: [embed], files: [attachment], ephemeral: true });
+        } else {
+            await interaction.editReply({ content: 'ごめんね、その子は今お散歩中みたいだちゅ……。', ephemeral: true });
+        }
+    }
+
+    else if (interaction.commandName === 'quiz') {
+        await interaction.deferReply({ ephemeral: true });
+        const isNezumi = Math.random() < 0.5;
+        let category = isNezumi ? (Math.random() < 0.5 ? 'mouse' : 'rat') : 'not_mouse';
+        const chosen = extraImages[category][Math.floor(Math.random() * extraImages[category].length)];
+        const attachment = await getJokeImage(chosen.file);
+
+        if (!attachment) return interaction.editReply({ content: '画像がお散歩中で見つからないちゅ…。', ephemeral: true });
+
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('correct_nezumi').setLabel('ねずみだちゅ！').setEmoji('🐭').setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setCustomId('incorrect_nezumi').setLabel('ねずみじゃない！').setEmoji('❌').setStyle(ButtonStyle.Danger)
+        );
+
+        const embed = new EmbedBuilder()
+            .setColor(0xFFA500)
+            .setTitle('❓ ねずみクイズ！')
+            .setDescription('この画像の子は「ねずみ」かな？\n下のボタンを押して答えてね！')
+            .setImage(`attachment://${attachment.name}`);
+
+        const response = await interaction.editReply({ embeds: [embed], files: [attachment], components: [row], ephemeral: true });
+        const filter = i => i.user.id === interaction.user.id;
+
+        try {
+            const confirmation = await response.awaitMessageComponent({ filter, time: 30000 });
+            const userChoice = (confirmation.customId === 'correct_nezumi');
+            const isCorrect = (userChoice === isNezumi);
+
+            const resultEmbed = new EmbedBuilder()
+                .setColor(isCorrect ? 0x00FF00 : 0xFF0000)
+                .setTitle(isCorrect ? '✨ 正解だちゅ！' : 'あちゃ〜、残念だちゅ…')
+                .setDescription(`この子の正体は **${chosen.name}** でした！`)
+                .setFooter({ text: isCorrect ? 'ねずみマスターだね！' : '次は当ててみてね！' });
+
+            await confirmation.update({ content: isCorrect ? '🎊 おめでとう！' : '😢 どんまいだちゅ…', embeds: [resultEmbed], components: [], ephemeral: true });
+        } catch (e) {
+            await interaction.editReply({ content: '時間切れだちゅ…。また遊んでね！', components: [], ephemeral: true });
+        }
+    }
+
+    else if (interaction.commandName === 'horoscope') {
+        await interaction.deferReply({ ephemeral: true });
+        const ranking = signs.map((name, index) => {
+            const score = Math.floor(getDailyRandom(index) * 100) + 1;
+            const itemIdx = Math.floor(getDailyRandom(index + 100) * luckyItems.length);
+            return { name, score, luckyItem: luckyItems[itemIdx] };
+        });
+        ranking.sort((a, b) => b.score - a.score);
+
+        const fullMessage = await getGeminiFullHoroscope(ranking);
+        const lines = fullMessage.split('\n');
+        const houfu = lines.find(l => l.includes('抱負'))?.replace('抱負：', '') || "楽しく過ごそうちゅ！";
+
+        const embed = new EmbedBuilder()
+            .setColor(0xFFD700)
+            .setTitle(`🐭 ねずみ星座占い（${new Date().toLocaleDateString('ja-JP')}）`)
+            .setDescription(`**✨ 今日の抱負 ✨**\n「${houfu}」`)
+            .setThumbnail('https://path-to-your-white-mouse-icon.png');
+
+        ranking.forEach((item, i) => {
+            const medal = i === 0 ? '🥇 ' : i === 1 ? '🥈 ' : i === 2 ? '🥉 ' : `第${i+1}位: `;
+            const comment = lines.find(l => l.startsWith(`${i+1}位`))?.split('：')[1] || "応援してるちゅ！";
+
+            if (i < 3) {
+                embed.addFields({ name: `${medal}${item.name} (${item.score}点)`, value: `💬 ${comment}\n🎁 アイテム: \`${item.luckyItem}\`` });
+            } else {
+                embed.addFields({ name: `${medal}${item.name}`, value: `💬 ${comment}`, inline: true });
+            }
+        });
+
+        await interaction.editReply({ embeds: [embed], ephemeral: true });
+    }
+
+    else if (interaction.commandName === 'rune') {
+        await interaction.deferReply({ ephemeral: true });
+        const personalSeed = getPersonalDailyRandom(interaction.user.id, 777);
+        const runeIndex = Math.floor(personalSeed * runeAlphabet.length);
+        const selectedRune = runeAlphabet[runeIndex];
+
+        const noReverseRunes = ['ᛗ', 'ᚷ', 'ᚹ', 'ᚻ', 'ᚾ', 'ᛁ', 'ᛃ', 'ᛇ', 'ᛊ', 'ᛝ', 'ᛞ'];
+        let isReversed = getPersonalDailyRandom(interaction.user.id, 888) < 0.5;
+        if (noReverseRunes.includes(selectedRune.symbol)) isReversed = false;
+
+        const imagePath = path.join(__dirname, 'images', selectedRune.image);
+
+        try {
+            if (!fs.existsSync(imagePath)) throw new Error(`FILE_NOT_FOUND: ${selectedRune.image}`);
+
+            const imageBuffer = await sharp(imagePath)
+                .resize(300, 300)
+                .rotate(isReversed ? 180 : 0)
+                .webp({ quality: 75 })
+                .toBuffer();
+            
+            const attachment = new AttachmentBuilder(imageBuffer, { name: 'rune.webp' });
+            const geminiMessage = await getGeminiRuneReading(selectedRune.name, isReversed, interaction.user.username);
+
+            const embed = new EmbedBuilder()
+                .setColor(0x8B4513)
+                .setTitle(`ᚱ 今日のルーン：${selectedRune.symbol} ${selectedRune.name}`)
+                .setImage('attachment://rune.webp')
+                .addFields(
+                    { name: '象徴', value: selectedRune.meaning, inline: true },
+                    { name: '向き', value: isReversed ? '逆位置 🙃' : '正位置 ✨', inline: true },
+                    { name: '石に刻まれた意味', value: isReversed ? selectedRune.reversed : selectedRune.upright },
+                    { name: 'ねずみのお告げ', value: geminiMessage }
+                )
+                .setFooter({ text: `${new Date().toLocaleDateString('ja-JP')} の石の言葉だちゅ！` });
+
+            await interaction.editReply({ embeds: [embed], files: [attachment] });
+        } catch (error) {
+            console.error('Rune Command Error:', error);
+            if (error.message.includes('FILE_NOT_FOUND')) {
+                await interaction.editReply(`画像（${selectedRune.image}）が images フォルダに見当たらないちゅ…。`);
+            } else {
+                await interaction.editReply('ルーンを読み取ろうとしたけど、何かがおかしいちゅ…。ログを確認してちゅ！');
+            }
+        }
+    }
 });
-// ここに先ほどコピーした「トークン」を貼り付けます
+
 client.login(process.env.DISCORD_TOKEN);

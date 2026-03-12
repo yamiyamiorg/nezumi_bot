@@ -2674,12 +2674,13 @@ client.on('interactionCreate', async (interaction) => {
 
     // 🍣 寿司の注文 (btn_sushi_order)
         // 💡 【追加】ボタンを押した時に、お寿司のリストを表示する処理だちゅ！
+        // 🍣 寿司の注文 (btn_sushi_order)
         else if (interaction.customId === 'btn_sushi_order') {
             const sushiOptions = sushiMenu.map((item, index) => ({
                 label: `${item.name} (${item.price}円)`,
                 description: item.description,
                 value: index.toString(),
-                emoji: '🍣'
+                emoji: '🍣' // Discordのシステム絵文字は文字化けしないからOKちゅ！
             }));
 
             const row = new ActionRowBuilder().addComponents(
@@ -2689,10 +2690,23 @@ client.on('interactionCreate', async (interaction) => {
                     .addOptions(sushiOptions)
             );
 
-            await interaction.editReply({ 
-                content: 'へいらっしゃい！新鮮なネタが揃ってるちゅ！注文を選んでね！', 
-                components: [row] 
-            });
+            try {
+                // 💡 ここでさっき作った歓迎キャンバスを呼び出すちゅ！
+                const pngBuffer = await generateSushiWelcomeCanvas();
+                const attachment = new AttachmentBuilder(pngBuffer, { name: 'sushi_welcome.png' });
+
+                await interaction.editReply({ 
+                    content: 'へいらっしゃい！', 
+                    files: [attachment],
+                    components: [row] 
+                });
+            } catch (e) {
+                console.error('寿司歓迎描画エラー:', e);
+                await interaction.editReply({ 
+                    content: 'へいらっしゃい！新鮮なネタが揃ってるちゅ！注文を選んでね！', 
+                    components: [row] 
+                });
+            }
         }
 
         // 💡 【超・軽量爆速版】プルダウンで注文した時の処理 (Canvasでお寿司の提供！)
@@ -3484,40 +3498,68 @@ client.on('interactionCreate', async (interaction) => {
     
 
     // 💡 【超・軽量爆速版】おあいそボタンを押した時の結果発表 (メニューを消して結果を表示！)
+    // 💡 【追加・復活！】おあいそクイズで注文を追加した時の処理
+    else if (interaction.isStringSelectMenu() && interaction.customId === 'oaiso_add_item') {
+        await interaction.deferUpdate();
+        const userId = interaction.user.id;
+        const game = oaisoGames.get(userId);
+
+        if (!game) return interaction.followUp({ content: '大将が注文を忘れちゃったちゅ。もう一度 /nezumi から始めてちゅ！', flags: MessageFlags.Ephemeral });
+
+        const selectedIndex = parseInt(interaction.values[0], 10);
+        const selectedSushi = sushiMenu[selectedIndex];
+
+        // 合計金額と履歴を更新するちゅ！
+        game.currentTotal += selectedSushi.price;
+        game.orderedItems.push(selectedSushi.name);
+
+        try {
+            // 💡 選んだお寿司の画像を表示しながら更新するちゅ！
+            const extraMsg = `${selectedSushi.name} 一丁！\n（今の合計金額を予想して、まだ頼むかおあいそするか決めてちゅ！）`;
+            const pngBuffer = await generateOaisoCanvas(game, 'playing', extraMsg, selectedSushi.image);
+            const attachment = new AttachmentBuilder(pngBuffer, { name: 'oaiso_playing.png' });
+
+            await interaction.editReply({ 
+                content: 'へいお待ち！🍣', 
+                files: [attachment] 
+            });
+        } catch (e) {
+            console.error('おあいそ追加エラー:', e);
+        }
+    }
+    // 💡 【復活！】おあいそボタンを押した時の結果発表 (メニューを消して結果を表示！)
     else if (interaction.isButton() && interaction.customId === 'oaiso_bill_please') {
         await interaction.deferUpdate();
         const userId = interaction.user.id;
         const game = oaisoGames.get(userId);
 
-        if (!game) return interaction.followUp({ content: 'ゲーム情報が見つからないちゅ。', ephemeral: true });
+        if (!game) return interaction.followUp({ content: '大将が注文を忘れちゃったちゅ。もう一度 /nezumi から始めてちゅ！', flags: MessageFlags.Ephemeral });
 
-        const diff = game.currentTotal - game.target;
+        const diff = Math.abs(game.currentTotal - game.target);
         let resultMsg = "";
+        let daishoImage = "daisho.jpg";
 
         if (diff === 0) {
-            resultMsg = `ピッタシだちゅ！！すごいちゅ！！\n大将も脱帽だちゅ、この勘の良さは本物だちゅ！`;
-        } else if (Math.abs(diff) <= 200) {
-            resultMsg = `惜しいちゅ！あとちょっとだったちゅ！\n（差額: ${Math.abs(diff)}円）。大将もヒヤヒヤしたちゅ、次はイケるちゅ！`;
+            resultMsg = "ピタリ賞だちゅ！！！大将もひっくり返るほどの完璧な注文だちゅ！🎉✨";
+        } else if (diff <= 500) {
+            resultMsg = `おしいっ！誤差たったの ${diff} 円だちゅ！大将もニッコリだちゅ！🍣`;
         } else {
-            resultMsg = `あちゃ〜、大外れだちゅ…。\n（差額: ${Math.abs(diff)}円）。勘が鈍ってるちゅ、ひまわりの種でも食べて出直してちゅ！`;
+            resultMsg = `あちゃー…誤差 ${diff} 円だちゅ。大将の修行からやり直しだちゅ！💥`;
         }
 
         try {
-            const pngBuffer = await generateOaisoCanvas(game, 'result', resultMsg, 'daisho.jpg');
+            const pngBuffer = await generateOaisoCanvas(game, 'result', resultMsg, daishoImage);
             const attachment = new AttachmentBuilder(pngBuffer, { name: 'oaiso_result.png' });
 
             oaisoGames.delete(userId);
-            
-            // 💡 修正：ここも editReply にして、components（ボタン類）を空にして消すちゅ！
+
             await interaction.editReply({ 
-                content: 'おあいそだちゅ！結果は…？🍣', 
-                embeds: [], 
-                components: [], // これでメニューが綺麗に消えるちゅ！
-                files: [attachment]
+                content: 'おあいそだちゅ！結果発表〜！🥁✨', 
+                files: [attachment],
+                components: [] 
             });
         } catch (e) {
             console.error('おあいそ結果エラー:', e);
-            await interaction.followUp({ content: '計算機が壊れちゃったちゅ…', ephemeral: true });
         }
     }
 

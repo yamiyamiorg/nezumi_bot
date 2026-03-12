@@ -2830,129 +2830,139 @@ client.on('interactionCreate', async (interaction) => {
         }
     }
 
-    // 💡 【超・軽量爆速版】/pet_status コマンド (Canvasを使ったステータス画面)
-    else if (interaction.commandName === 'pet_status') {
+    // 💡 【超・軽量爆速版】/pet_train コマンド (Canvasを使った特訓リザルト画面)
+    else if (interaction.commandName === 'pet_train') {
         const flags = isHidden ? MessageFlags.Ephemeral : undefined;
         await interaction.deferReply({ flags });
         
         const userId = interaction.user.id;
         const myPet = userPets[userId];
-
+        const course = interaction.options.getString('course');
+        
+        // 💡 クールダウン管理（もし一番上に無ければここでも動くようにしておくちゅ）
+        if (!global.trainCooldowns) global.trainCooldowns = new Map();
+        
         if (!myPet) {
-            return interaction.editReply({ content: 'あなたはまだ相棒を持っていないちゅ。`/pet_catch` で探しに行こうちゅ！🌱' });
+            return interaction.editReply({ content: '特訓する相棒がいないちゅ！まずは `/pet_catch` で見つけるちゅ！🌱' });
         }
 
-        // 絵文字を取り除く魔法（Canvasの文字化け防止！）
+        const COOLDOWN_TIME = 5 * 60 * 1000; 
+        const lastTrain = global.trainCooldowns.get(userId);
+        
+        if (lastTrain && (Date.now() - lastTrain) < COOLDOWN_TIME) {
+            const timeLeft = COOLDOWN_TIME - (Date.now() - lastTrain);
+            const minutes = Math.floor(timeLeft / 60000);
+            const seconds = Math.floor((timeLeft % 60000) / 1000);
+            return interaction.editReply({ content: `💦 相棒がヘトヘトだちゅ！次の特訓まであと **${minutes}分${seconds}秒** 休ませてあげてちゅ！🍵` });
+        }
+
+        global.trainCooldowns.set(userId, Date.now());
+
+        // 特訓の計算処理
+        let bonus = { hp: 0, atk: 0, def: 0, spd: 0, sp: 0, stagger: 0 };
+        let flavorText = "";
+        if (course === 'atk') { bonus.atk = 2; bonus.hp = 1; flavorText = "重い丸太を持ち上げてスクワットをしたちゅ！筋肉がパンパンだちゅ！"; }
+        else if (course === 'def') { bonus.def = 2; bonus.hp = 1; flavorText = "飛んでくる木の実をひたすらガードしたちゅ！打たれ強くなったちゅ！"; }
+        else if (course === 'spd') { bonus.spd = 2; flavorText = "川沿いを全速力で猛ダッシュしたちゅ！足腰が鍛えられたちゅ！"; }
+        else if (course === 'sp') { bonus.sp = 2; bonus.stagger = 2; flavorText = "冷たい滝に打たれて精神を統一したちゅ！心が研ぎ澄まされたちゅ！"; }
+        else if (course === 'all') { bonus.hp = 1; bonus.atk = 1; bonus.def = 1; bonus.spd = 1; flavorText = "いろんな基礎特訓をまんべんなくこなしたちゅ！いい汗かいたちゅ！"; }
+
+        const gainedExp = Math.floor(Math.random() * 11) + 5;
+        myPet.exp += gainedExp;
+
+        let levelUpInfo = null;
+        let requiredExp = myPet.level * 10;
+
+        if (myPet.exp >= requiredExp) {
+            myPet.level += 1;
+            myPet.exp -= requiredExp;
+            const speciesData = petSpecies.find(s => s.name === myPet.name) || petSpecies[0];
+            const g = speciesData.growth;
+            const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+
+            const grow = {
+                hp: rand(g.hp[0], g.hp[1]) + bonus.hp,
+                atk: rand(g.atk[0], g.atk[1]) + bonus.atk,
+                def: rand(g.def[0], g.def[1]) + bonus.def,
+                spd: rand(g.spd[0], g.spd[1]) + bonus.spd,
+                sp: rand(g.maxSp[0], g.maxSp[1]) + bonus.sp,
+                stg: rand(g.staggerMax[0], g.staggerMax[1]) + bonus.stagger
+            };
+
+            myPet.maxHp += grow.hp; myPet.hp = myPet.maxHp;
+            myPet.atk += grow.atk; myPet.def += grow.def; myPet.spd += grow.spd;
+            myPet.maxSp += grow.sp; myPet.staggerMax += grow.stg;
+            levelUpInfo = grow;
+        }
+        savePets();
+
+        // 💡 ここからCanvas描画
         const stripEmoji = (str) => str.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, '').replace(/[\u2600-\u27BF]/g, '').trim();
 
         try {
-            // 💡 1. 相棒の種族データを取得して画像を読み込むちゅ！
             const speciesData = petSpecies.find(s => s.name === myPet.name);
-            const imageFileName = speciesData ? speciesData.image : 'default_pet.jpg';
-            const imagePath = path.join(__dirname, 'images', imageFileName);
-
-            let img = null;
-            let drawHeight = 300;
-            const cardWidth = 300;
-
+            const imagePath = path.join(__dirname, 'images', speciesData.image);
+            let img = null; let drawHeight = 250; const cardWidth = 250;
             if (fs.existsSync(imagePath)) {
                 img = await loadImage(imagePath);
-                const aspectRatio = img.width / img.height;
-                drawHeight = cardWidth / Math.max(0.1, aspectRatio);
+                drawHeight = cardWidth / (img.width / img.height);
             }
 
-            // 💡 2. キャンバスのサイズを決定（ステータス情報が多いから縦長にするちゅ！）
             const canvasWidth = 600;
             const headerHeight = 100;
-            const statusBoxHeight = 350; 
-            const canvasHeight = headerHeight + drawHeight + statusBoxHeight + 60;
+            const resultBoxHeight = levelUpInfo ? 450 : 300; // レベルアップ時は枠を広げる
+            const canvasHeight = headerHeight + drawHeight + resultBoxHeight + 60;
 
             const canvas = createCanvas(canvasWidth, canvasHeight);
             const ctx = canvas.getContext('2d');
 
-            // 背景と枠線（サイバー・クールなブルー系）
-            ctx.fillStyle = '#1a1c2c';
-            ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-            ctx.strokeStyle = '#00BFFF';
-            ctx.lineWidth = 10;
-            ctx.strokeRect(0, 0, canvasWidth, canvasHeight);
+            // 背景と枠線
+            ctx.fillStyle = '#1e1e24'; ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+            ctx.strokeStyle = '#FFA500'; ctx.lineWidth = 10; ctx.strokeRect(0, 0, canvasWidth, canvasHeight);
 
             // タイトル
-            ctx.textAlign = 'center';
-            ctx.font = 'bold 32px NotoSansJP';
-            ctx.fillStyle = '#00BFFF';
-            ctx.fillText(`第${myPet.rank}位：${interaction.user.username}の相棒`, canvasWidth / 2, 60);
+            ctx.textAlign = 'center'; ctx.font = 'bold 36px NotoSansJP'; ctx.fillStyle = '#FFA500';
+            ctx.fillText(`${stripEmoji(myPet.name)}の猛特訓リザルト`, canvasWidth / 2, 60);
 
-            // 💡 画像の描画（アスペクト比維持！）
-            const centerX = canvasWidth / 2;
-            const imgY = headerHeight;
+            // 画像描画
             if (img) {
-                ctx.drawImage(img, centerX - cardWidth / 2, imgY, cardWidth, drawHeight);
-                ctx.strokeStyle = '#ffffff';
-                ctx.lineWidth = 4;
-                ctx.strokeRect(centerX - cardWidth / 2, imgY, cardWidth, drawHeight);
+                ctx.drawImage(img, (canvasWidth - cardWidth) / 2, headerHeight, cardWidth, drawHeight);
+                ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 4; ctx.strokeRect((canvasWidth - cardWidth) / 2, headerHeight, cardWidth, drawHeight);
             }
 
-            // 💡 ステータスエリアの描画
-            const boxY = imgY + drawHeight + 30;
-            ctx.fillStyle = '#2b2d31';
-            ctx.fillRect(40, boxY, canvasWidth - 80, statusBoxHeight - 40);
-            ctx.strokeStyle = '#444';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(40, boxY, canvasWidth - 80, statusBoxHeight - 40);
+            // 結果エリア
+            let currentY = headerHeight + drawHeight + 30;
+            ctx.fillStyle = '#2b2d31'; ctx.fillRect(40, currentY, canvasWidth - 80, resultBoxHeight - 40);
+            ctx.strokeStyle = '#444'; ctx.lineWidth = 2; ctx.strokeRect(40, currentY, canvasWidth - 80, resultBoxHeight - 40);
 
-            // 種族名とレベル
-            ctx.textAlign = 'left';
-            ctx.font = 'bold 28px NotoSansJP';
-            ctx.fillStyle = '#FFD700';
-            ctx.fillText(`${myPet.name} (Lv.${myPet.level})`, 60, boxY + 50);
+            ctx.textAlign = 'left'; ctx.font = 'italic 20px NotoSansJP'; ctx.fillStyle = '#e0e0e0';
+            currentY += 45;
+            currentY = drawCanvasText(ctx, stripEmoji(flavorText), 60, currentY, canvasWidth - 120, 28);
 
-            // ステータス項目
-            ctx.font = '22px NotoSansJP';
-            ctx.fillStyle = '#ffffff';
-            const statsY = boxY + 100;
-            ctx.fillText(`❤️ HP: ${myPet.hp} / ${myPet.maxHp}`, 60, statsY);
-            ctx.fillText(`🗡️ ATK: ${myPet.atk}`, 60, statsY + 40);
-            ctx.fillText(`🛡️ DEF: ${myPet.def}`, 60, statsY + 80);
-            ctx.fillText(`💨 SPD: ${myPet.spd}`, 60, statsY + 120);
+            currentY += 30; ctx.font = 'bold 24px NotoSansJP'; ctx.fillStyle = '#00FF00';
+            ctx.fillText(`+${gainedExp} EXP 獲得！`, 60, currentY);
 
-            // 経験値（EXP）バーの描画
-            const nextExp = myPet.level * 10;
-            const expPercent = Math.min(1, myPet.exp / nextExp);
-            const barWidth = canvasWidth - 120;
-            const barY = statsY + 170;
+            // レベルアップ表示
+            if (levelUpInfo) {
+                currentY += 40; ctx.font = 'bold 28px NotoSansJP'; ctx.fillStyle = '#FFD700';
+                ctx.fillText(`🎉 レベルアップ！ Lv.${myPet.level}`, 60, currentY);
+                ctx.font = '18px NotoSansJP'; ctx.fillStyle = '#ffffff';
+                currentY += 35;
+                ctx.fillText(`HP+${levelUpInfo.hp} ATK+${levelUpInfo.atk} DEF+${levelUpInfo.def} SPD+${levelUpInfo.spd} SP+${levelUpInfo.sp}`, 60, currentY);
+            }
 
-            ctx.fillStyle = '#333'; // バーの背景
-            ctx.fillRect(60, barY, barWidth, 30);
-            ctx.fillStyle = '#00FF00'; // 経験値の色
-            ctx.fillRect(60, barY, barWidth * expPercent, 30);
-            
-            ctx.font = '18px NotoSansJP';
-            ctx.fillStyle = '#ffffff';
-            ctx.textAlign = 'center';
-            ctx.fillText(`EXP: ${myPet.exp} / ${nextExp}`, canvasWidth / 2, barY + 22);
+            // ステータスサマリー
+            currentY = canvasHeight - 80;
+            ctx.font = 'bold 20px NotoSansJP'; ctx.fillStyle = '#ffffff';
+            ctx.fillText(`現在の能力：HP ${myPet.maxHp} | ATK ${myPet.atk} | DEF ${myPet.def} | SPD ${myPet.spd}`, 60, currentY);
 
-            // 統合コメント（スタミナや混乱耐性など）
-            ctx.textAlign = 'left';
-            ctx.font = '18px NotoSansJP';
-            ctx.fillStyle = '#e0e0e0';
-            ctx.fillText(`SP上限: ${myPet.maxSp || 15} | 混乱耐性: ${myPet.staggerMax || 20}`, 60, barY + 70);
-
-            // 日付
-            ctx.textAlign = 'right';
-            ctx.font = '14px NotoSansJP';
-            ctx.fillStyle = '#888';
-            ctx.fillText(`ステータス確認日：${getJSTInfo().displayDate}`, canvasWidth - 50, canvasHeight - 20);
-
-            // PNG画像にして送信！
             const pngBuffer = await canvas.encode('png');
-            const attachment = new AttachmentBuilder(pngBuffer, { name: 'pet_status_canvas.png' });
-
-            await interaction.editReply({ content: '相棒の調子を調べてきたちゅ！📊✨', embeds: [], files: [attachment] });
+            const attachment = new AttachmentBuilder(pngBuffer, { name: 'pet_train_canvas.png' });
+            await interaction.editReply({ content: '特訓お疲れ様だちゅ！いい汗かいたちゅね！💪✨', embeds: [], files: [attachment] });
 
         } catch (error) {
-            console.error('Canvasペットステータスエラー:', error);
-            await interaction.editReply({ content: 'ステータス画面を作るのに失敗しちゃったちゅ…。' });
+            console.error('Canvas特訓エラー:', error);
+            await interaction.editReply({ content: '特訓の記録中に筆が折れちゃったちゅ…。' });
         }
     }
 

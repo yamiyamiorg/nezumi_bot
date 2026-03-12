@@ -14,7 +14,22 @@ const path = require('path');
 const fs = require('fs');
 const cron = require('node-cron');
 require('dotenv').config();
+const sharp = require('sharp'); // sharpは既にあるちゅ
+// 💡 【追加】satori関連のライブラリ
+const satori = require('satori').default;
+const { Resvg } = require('@resvg/resvg-js');
+const React = require('react');
 
+// 💡 【追加】フォントファイルを読み込む
+const fontPath = path.join(__dirname, 'fonts', 'akabara-cinderella.ttf'); // さっき置いたフォントファイル名に合わせてちゅ！
+let fontData;
+try {
+    fontData = fs.readFileSync(fontPath);
+} catch (e) {
+    console.error('❌ フォントファイルの読み込みに失敗したちゅ！images/fonts フォルダに .ttf ファイルがあるか確認してちゅ💦');
+    // フォントがないと起動時にエラーになるから、ダミーのバッファを入れておくちゅ（描画はされないちゅ）
+    fontData = Buffer.alloc(0); 
+}
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
@@ -375,6 +390,28 @@ async function getGeminiReading3(cards, username) {
         } catch (localError) {
             return "3枚の運命が複雑すぎて、ねずみの頭がパンクしちゃったちゅ…。でも、どのカードもあなたを応援してるちゅ！";
         }
+    }
+}
+// 💡 【追加】カード画像をBase64文字列として取得する関数
+async function getCardImageBase64(imageFileName, isReversed) {
+    try {
+        const imagePath = path.join(__dirname, 'images', imageFileName);
+        if (!fs.existsSync(imagePath)) return null;
+
+        let transform = sharp(imagePath)
+            .resize(250) // satori上の表示サイズに合わせて少しリサイズ
+            .webp({ quality: 80 }); // WebPに変換して少し軽くするちゅ
+
+        if (isReversed) {
+            transform = transform.rotate(180);
+        }
+
+        const buffer = await transform.toBuffer();
+        // Base64の魔法の文字列（data:image/webp;base64,...）にして返すちゅ！
+        return `data:image/webp;base64,${buffer.toString('base64')}`;
+    } catch (error) {
+        console.error('Base64画像生成エラー:', error.message);
+        return null; 
     }
 }
 
@@ -842,13 +879,16 @@ client.on('interactionCreate', async (interaction) => {
         }
     }
 
+    // 💡 【超進化】/tarot3 コマンド (satoriによる1枚画像出力)
     else if (interaction.commandName === 'tarot3') {
+        // satoriの処理は時間がかかるから、少し長めに待ってもらうちゅ
         await interaction.deferReply({ ephemeral: isHidden });
 
         const positions = ['過去 🕰️', '現在 📍', '未来 🚀'];
         const drawnResults = []; 
         let tempDeck = [...tarotCards];
 
+        // 1. まずはカードを3枚引く（ここは今までと同じだちゅ）
         for (let i = 0; i < 3; i++) {
             const personalSeed = getPersonalDailyRandom(interaction.user.id, (i + 1) * 777);
             const cardIndex = Math.floor(personalSeed * tempDeck.length);
@@ -857,38 +897,105 @@ client.on('interactionCreate', async (interaction) => {
             const reverseSeed = getPersonalDailyRandom(interaction.user.id, (i + 1) * 999);
             const isReversed = reverseSeed < 0.5;
 
-            drawnResults.push({ name: card.name, isReversed: isReversed, card: card });
-            const imageAttachment = await getCardImage(card.image, isReversed);
-
-            const embed = new EmbedBuilder()
-                .setColor(isReversed ? 0xFF6347 : 0x00FA9A)
-                .setTitle(`${positions[i]}: ${card.name}`)
-                .setDescription(`**${isReversed ? '逆位置 🙃' : '正位置 ✨'}**\n\n${isReversed ? card.reversed : card.upright}`);
-
-            if (imageAttachment) {
-                embed.setImage(`attachment://${imageAttachment.name}`);
-                await interaction.followUp({ embeds: [embed], files: [imageAttachment], ephemeral: isHidden });
-            } else {
-                await interaction.followUp({ embeds: [embed], content: '画像の読み込みに失敗しました。', ephemeral: isHidden });
-            }
+            drawnResults.push({ name: card.name, isReversed: isReversed, card: card, position: positions[i] });
         }
 
-        const geminiExplanation = await getGeminiReading3(drawnResults, interaction.user.username);
+        // 2. 引いたカードのBase64画像データを取得するちゅ（新しい関数を使う！）
+        const cardImages = [];
+        for (const result of drawnResults) {
+            const base64 = await getCardImageBase64(result.card.image, result.isReversed);
+            cardImages.push(base64);
+        }
+
+        // 3. Geminiから統合リーディングを取得する（これも今までと同じだちゅ）
+        let geminiExplanation = await getGeminiReading3(drawnResults, interaction.user.username);
+        if (!geminiExplanation) geminiExplanation = "運命の糸が絡まってうまく読めなかったちゅ…。";
+
+        // 解説テキストが長すぎると画像からはみ出るから、少し短くカットするちゅ
+        const maxTextLength = 400;
+        const shortExplanation = geminiExplanation.length > maxTextLength ? geminiExplanation.slice(0, maxTextLength) + '...' : geminiExplanation;
+
+        // 4. 物語を生成する（これも今までと同じだちゅ）
         const storyResult = generateTarotStory(drawnResults[0], drawnResults[1], drawnResults[2]);
 
-        const storyEmbed = new EmbedBuilder()
-            .setColor(0x5865F2)
-            .setTitle(`📖 あなたの物語: ${storyResult.storyType}`)
-            .setDescription(storyResult.message)
-            .addFields({ 
-                name: '🐭 ねずみの統合リーディング', 
-                value: geminiExplanation || "運命の糸が絡まってうまく読めなかったちゅ…。"
-            })
-            .setFooter({ text: `今日（${getJSTInfo().displayDate}）の運命だちゅ！` });
+        // 5. 🎙️ satoriを使って画像をデザインするちゅ！
+        // 💡 HTML/CSSのようなJSXという構文を使ってレイアウトを決めるちゅ。
+        const element = React.createElement('div', {
+            style: {
+                display: 'flex', flexDirection: 'column', alignItems: 'center',
+                width: '1200px', height: '1000px', // 全体のサイズ
+                backgroundColor: '#1a1a1a', color: '#e0e0e0', // ダークモード風
+                fontFamily: 'NotoSansJP', // さっきのフォントを使う指定だちゅ
+                padding: '40px', boxSizing: 'border-box',
+                borderRadius: '20px', border: '4px solid #5865F2'
+            }
+        },
+            // タイトル
+            React.createElement('div', { style: { fontSize: '48px', fontWeight: 'bold', marginBottom: '30px', color: '#FFD700' } }, 
+                `✨ ${interaction.user.username}さんの運命の3枚引き ✨`
+            ),
 
-        await interaction.followUp({ embeds: [storyEmbed], ephemeral: isHidden });
+            // カードエリア（横並び）
+            React.createElement('div', { style: { display: 'flex', justifyContent: 'space-around', width: '100%', marginBottom: '40px' } },
+                drawnResults.map((result, i) => React.createElement('div', { key: i, style: { display: 'flex', flexDirection: 'column', alignItems: 'center', width: '300px' } },
+                    // キャプション（過去・現在・未来）
+                    React.createElement('div', { style: { fontSize: '28px', marginBottom: '10px', color: '#00FA9A' } }, result.position),
+                    // カード画像（Base64データを埋め込む！）
+                    cardImages[i] ? React.createElement('img', { src: cardImages[i], style: { width: '250px', height: '430px', borderRadius: '10px', marginBottom: '10px', boxShadow: '0 4px 8px rgba(0,0,0,0.5)' } }) : React.createElement('div', { style: { width: '250px', height: '430px', backgroundColor: '#333', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' } }, '画像なし'),
+                    // カード名と正逆
+                    React.createElement('div', { style: { fontSize: '22px', fontWeight: 'bold' } }, result.card.name),
+                    React.createElement('div', { style: { fontSize: '18px', color: result.isReversed ? '#FF6347' : '#e0e0e0' } }, result.isReversed ? '逆位置 🙃' : '正位置 ✨')
+                ))
+            ),
+
+            // 解説エリア（物語 ＋ Gemini解説）
+            React.createElement('div', { style: { display: 'flex', flexDirection: 'column', width: '100%', backgroundColor: '#2a2a2a', padding: '30px', borderRadius: '15px', border: '1px solid #444' } },
+                // 物語タイトル
+                React.createElement('div', { style: { fontSize: '32px', fontWeight: 'bold', color: '#5865F2', marginBottom: '15px' } }, 
+                    `📖 あなたの物語: ${storyResult.storyType}`
+                ),
+                // 物語本文
+                React.createElement('div', { style: { fontSize: '22px', fontStyle: 'italic', marginBottom: '25px', lineHeight: '1.4' } }, 
+                    storyResult.message
+                ),
+                // Gemini解説タイトル
+                React.createElement('div', { style: { fontSize: '28px', fontWeight: 'bold', color: '#e0e0e0', marginBottom: '10px' } }, 
+                    '🐭 ねずみの統合リーディング'
+                ),
+                // Gemini解説本文
+                React.createElement('div', { style: { fontSize: '20px', lineHeight: '1.6' } }, 
+                    shortExplanation
+                )
+            ),
+
+            // フッター（日付）
+            React.createElement('div', { style: { position: 'absolute', bottom: '20px', right: '30px', fontSize: '18px', color: '#888' } }, 
+                `今日（${getJSTInfo().displayDate}）の運命だちゅ！`
+            )
+        );
+
+        // 6. satoriでSVGを生成する
+        const svg = await satori(element, {
+            width: 1200, height: 1000,
+            fonts: [
+                {
+                    name: 'NotoSansJP',
+                    data: fontData, // 読み込んだフォントデータ
+                    weight: 400,
+                    style: 'normal',
+                },
+            ],
+        });
+
+        // 7. resvgでSVGをPNG画像に変換するちゅ！
+        const resvg = new Resvg(svg);
+        const pngData = resvg.render();
+        const pngBuffer = pngData.asPng();
+
+        // 8. 最後にDiscordに送信！Embedは使わず、画像を直接送るちゅ。
+        const attachment = new AttachmentBuilder(pngBuffer, { name: 'tarot3_reading.png' });
+        await interaction.editReply({ files: [attachment] });
     }
-
     else if (interaction.commandName === 'hitandblow') {
         await interaction.deferReply({ ephemeral: isHidden });
         const guess = interaction.options.getString('guess');

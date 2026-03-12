@@ -830,7 +830,8 @@ baseHp: 35, baseAtk: 8, baseDef: 2, baseSpd: 7, maxSp: 10, staggerMax: 15,
         image: 'p_eleki.jpg' // 【追加】エレキネズミの画像だちゅ！
     }
 ];
-const generatePetCatchCanvas = async (pet, state, extraMsg) => {
+// 💡 【超・軽量爆速版】ペットキャッチ専用のCanvas画像生成魔法だちゅ！
+    const generatePetCatchCanvas = async (pet, state, extraMsg) => {
         const canvasWidth = 600;
         const dummyCanvas = createCanvas(1, 1);
         const dummyCtx = dummyCanvas.getContext('2d');
@@ -843,7 +844,10 @@ const generatePetCatchCanvas = async (pet, state, extraMsg) => {
         let img = null;
         let imgDrawHeight = 0;
         const imgContentWidth = 500;
-        const imagePath = path.resolve(__dirname, 'images', pet.file);
+        
+        // 💡 修正：モンスターデータ(image)と写真データ(file)の両方に対応するちゅ！
+        const imageFileName = pet.image || pet.file; 
+        const imagePath = path.resolve(__dirname, 'images', imageFileName);
         
         if (fs.existsSync(imagePath)) {
             img = await loadImage(imagePath);
@@ -916,7 +920,6 @@ const generatePetCatchCanvas = async (pet, state, extraMsg) => {
             ctx.textAlign = 'left';
             ctx.font = 'bold 24px NotoSansJP';
             ctx.fillStyle = '#ffffff';
-            // 中央寄せっぽく見せるために左余白を少し多めに取るちゅ
             drawCanvasText(ctx, extraMsg, 60, currentY + 45, canvasWidth - 120, 32);
         }
 
@@ -2581,15 +2584,14 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     // 💡 【超・軽量爆速版】/pet_catch コマンド (絶対に考え中で止まらない安全版)
+    // 💡 【超・軽量爆速版】/pet_catch コマンド (RPG用のモンスターを呼び出すように修正！)
     else if (interaction.commandName === 'pet_catch') {
-        // 💡 警告が出ない新しい書き方だちゅ！
         const flags = (typeof isHidden !== 'undefined' && isHidden) ? MessageFlags.Ephemeral : undefined;
         await interaction.deferReply({ flags });
 
         try {
-            // 💡 エラーが起きやすい部分を、すべて安全装置（try）の中に入れたちゅ！
-            const allPets = [...extraImages.mouse, ...extraImages.rat, ...extraImages.not_mouse];
-            const targetPet = allPets[Math.floor(Math.random() * allPets.length)];
+            // 💡 修正：クイズの写真リストではなく、ペット(モンスター)のリストから選ぶちゅ！
+            const targetPet = petSpecies[Math.floor(Math.random() * petSpecies.length)];
             
             // プレイヤーがどの動物に遭遇したか記憶するちゅ
             petCatches.set(interaction.user.id, targetPet);
@@ -2605,7 +2607,8 @@ client.on('interactionCreate', async (interaction) => {
                     .setStyle(ButtonStyle.Secondary)
             );
 
-            const extraMsg = `野生の「${targetPet.name}」が現れたちゅ！\nそーっと近づいて、下のボタンで捕まえるちゅ！`;
+            // 種族の説明(desc)も一緒に表示してあげるちゅ！
+            const extraMsg = `野生の「${targetPet.name}」が現れたちゅ！\n${targetPet.desc}\nそーっと近づいて、捕まえるちゅ！`;
             const pngBuffer = await generatePetCatchCanvas(targetPet, 'appear', extraMsg);
             const attachment = new AttachmentBuilder(pngBuffer, { name: 'pet_appear.png' });
 
@@ -2617,12 +2620,12 @@ client.on('interactionCreate', async (interaction) => {
             });
         } catch (e) {
             console.error('ペット出現エラー:', e);
-            // 💡 万が一エラーが起きても、ここで必ず「考え中」を解除するちゅ！
             await interaction.editReply({ content: '草むらに逃げられちゃったちゅ…（※黒い画面のエラーログを見てちゅ！）' });
         }
     }
 
     // 💡 【超・軽量爆速版】捕まえるボタンを押した時の処理 (警告対策版)
+    // 💡 【超・軽量爆速版】捕まえるボタンを押した時の処理 (データ保存処理を追加！)
     else if (interaction.isButton() && (interaction.customId === 'catch_attempt' || interaction.customId === 'catch_ignore')) {
         await interaction.deferUpdate();
         const userId = interaction.user.id;
@@ -2635,7 +2638,6 @@ client.on('interactionCreate', async (interaction) => {
             });
         }
 
-        // 見逃すボタンを押した場合
         if (interaction.customId === 'catch_ignore') {
             petCatches.delete(userId);
             return interaction.editReply({ 
@@ -2651,12 +2653,38 @@ client.on('interactionCreate', async (interaction) => {
 
         if (isSuccess) {
             resultMsg = `お見事だちゅ！\n「${targetPet.name}」が新しくお友達になったちゅ！🎉`;
+
+            // 💡 超重要：捕獲成功したら、ちゃんと自分のデータとして登録・保存するちゅ！
+            userPets[userId] = {
+                name: targetPet.name,
+                emoji: targetPet.emoji,
+                level: 1,
+                exp: 0,
+                hp: targetPet.baseHp,
+                maxHp: target教えて.baseHp,
+                atk: targetPet.baseAtk,
+                def: targetPet.baseDef,
+                spd: targetPet.baseSpd,
+                maxSp: targetPet.maxSp,
+                staggerMax: targetPet.staggerMax,
+                rank: 99999 // 一旦一番下に配置するちゅ
+            };
+
+            // ランキングの空席を詰めて綺麗に並び直すちゅ
+            const sortedIds = Object.keys(userPets).sort((a, b) => userPets[a].rank - userPets[b].rank);
+            let expectedRank = 1;
+            for (const id of sortedIds) {
+                userPets[id].rank = expectedRank;
+                expectedRank++;
+            }
+            // データをセーブ！
+            savePets();
+
         } else {
             resultMsg = `ああっ！素早くて逃げられちゃったちゅ…\n「${targetPet.name}」は草むらの奥へ消えていったちゅ。🍃`;
         }
 
         try {
-            // 結果に合わせて画像を更新！
             const pngBuffer = await generatePetCatchCanvas(targetPet, state, resultMsg);
             const attachment = new AttachmentBuilder(pngBuffer, { name: 'pet_result.png' });
 
@@ -2665,7 +2693,7 @@ client.on('interactionCreate', async (interaction) => {
             await interaction.editReply({ 
                 content: isSuccess ? 'やったね！✨' : '残念だちゅ…💦', 
                 embeds: [], 
-                components: [], // ボタンを消す
+                components: [], 
                 files: [attachment]
             });
         } catch (e) {

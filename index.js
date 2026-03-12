@@ -1028,6 +1028,99 @@ const generatePetBattleCanvas = async (challenger, opponent, myState, oppState, 
 
     return await canvas.encode('png');
 };
+// 💡 【追加】ペットバトル・リザルト専用のCanvas画像生成魔法だちゅ！
+const generatePetBattleResultCanvas = async (winnerPet, winnerUsername, rankMsg, aiCommentary) => {
+    const canvasWidth = 600;
+    const dummyCanvas = createCanvas(1, 1);
+    const dummyCtx = dummyCanvas.getContext('2d');
+
+    // 絵文字取り除きとテキスト整形
+    const stripEmoji = (str) => str.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, '').replace(/[\u2600-\u27BF]/g, '').trim();
+    const safeRank = stripEmoji(rankMsg);
+    const safeComment = stripEmoji(aiCommentary);
+
+    // 高さを測るちゅ
+    dummyCtx.font = 'bold 22px NotoSansJP';
+    const rankHeight = measureTextHeight(dummyCtx, safeRank, canvasWidth - 120, 32);
+    dummyCtx.font = 'italic 20px NotoSansJP';
+    const commentHeight = measureTextHeight(dummyCtx, safeComment, canvasWidth - 120, 28);
+
+    // 画像読み込み
+    const species = petSpecies.find(s => s.name === winnerPet.name);
+    const imgPath = path.join(__dirname, 'images', species.image);
+    let img = null;
+    let drawHeight = 300;
+    const contentWidth = 400;
+
+    if (fs.existsSync(imgPath)) {
+        img = await loadImage(imgPath);
+        drawHeight = contentWidth / (img.width / img.height);
+    }
+
+    const headerHeight = 120;
+    const imgSectionHeight = drawHeight + 40;
+    const boxHeight = (40 + rankHeight) + 30 + (40 + commentHeight) + 60;
+    const canvasHeight = headerHeight + imgSectionHeight + boxHeight;
+
+    const canvas = createCanvas(canvasWidth, canvasHeight);
+    const ctx = canvas.getContext('2d');
+
+    // 背景（勝利を祝うゴールドと黒のグラデーション風）
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+    ctx.strokeStyle = '#FFD700'; // 優勝のゴールド枠
+    ctx.lineWidth = 12;
+    ctx.strokeRect(0, 0, canvasWidth, canvasHeight);
+
+    // タイトル
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 42px NotoSansJP';
+    ctx.fillStyle = '#FFD700';
+    ctx.fillText('🏆 BATTLE RESULT 🏆', canvasWidth / 2, 70);
+
+    let currentY = headerHeight;
+
+    // 勝者の画像
+    const imgX = (canvasWidth - contentWidth) / 2;
+    if (img) {
+        ctx.drawImage(img, imgX, currentY, contentWidth, drawHeight);
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 5;
+        ctx.strokeRect(imgX, currentY, contentWidth, drawHeight);
+    }
+    currentY += imgSectionHeight;
+
+    // リザルトボックス
+    ctx.fillStyle = '#2b2d31';
+    ctx.fillRect(40, currentY, canvasWidth - 80, boxHeight - 40);
+    ctx.strokeStyle = '#FFD700';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(40, currentY, canvasWidth - 80, boxHeight - 40);
+
+    // 勝者名
+    ctx.font = 'bold 28px NotoSansJP';
+    ctx.fillStyle = '#FFD700';
+    ctx.fillText(`WINNER: ${winnerUsername}`, canvasWidth / 2, currentY + 50);
+
+    // ランク変動
+    ctx.textAlign = 'left';
+    ctx.font = 'bold 22px NotoSansJP';
+    ctx.fillStyle = '#00FF00';
+    ctx.fillText('📊 ランク変動', 60, currentY + 100);
+    ctx.fillStyle = '#ffffff';
+    let nextY = drawCanvasText(ctx, safeRank, 60, currentY + 135, canvasWidth - 120, 32);
+
+    // AI実況
+    nextY += 20;
+    ctx.font = 'bold 22px NotoSansJP';
+    ctx.fillStyle = '#87CEEB';
+    ctx.fillText('🎙️ ねずみの実況', 60, nextY);
+    ctx.font = 'italic 20px NotoSansJP';
+    ctx.fillStyle = '#e0e0e0';
+    drawCanvasText(ctx, safeComment, 60, nextY + 35, canvasWidth - 120, 28);
+
+    return await canvas.encode('png');
+};
 //**************************************************************************************心の天気図（気分記録）******************************************************************************************** */
 const kibunDataFile = path.join(__dirname, 'kibun.json');
 let userKibun = {}; 
@@ -3172,15 +3265,13 @@ client.on('interactionCreate', async (interaction) => {
         });
 
         collector.on('end', async () => {
-            // 💡 最終画面を生成
-            await sendBattleTurn(true);
-
             if (!isGameOver) {
-                battleLog += `\n⏳ タイムアップだちゅ…。`;
+                // タイムアップの時は画像なしでメッセージだけ送るちゅ
+                await interaction.editReply({ content: '⏳ タイムアップだちゅ…。引き分けだちゅね。', components: [] });
             } else {
-                let winnerName = myState.hp > 0 ? interaction.user.username : opponentUser.username;
-                battleLog += `\n💀 決着！！ 勝者：${winnerName} 💀`;
-
+                let winnerUser = myState.hp > 0 ? interaction.user : opponentUser;
+                let winnerPet = myState.hp > 0 ? myPet : oppPet;
+                
                 let rankMsg = "";
                 let myOldRank = myPet.rank;
                 let oppOldRank = oppPet.rank;
@@ -3189,41 +3280,47 @@ client.on('interactionCreate', async (interaction) => {
                     if (myOldRank > oppOldRank) {
                         myPet.rank = oppOldRank;
                         oppPet.rank = myOldRank;
-                        rankMsg = `👑 下剋上達成！！ 第${myOldRank}位 ➡️ 第${oppOldRank}位`;
+                        rankMsg = `下剋上達成！！ 第${myOldRank}位 から 第${oppOldRank}位 に上がったちゅ！`;
                     } else {
-                        rankMsg = `🛡️ 防衛成功！ (第${myPet.rank}位)`;
+                        rankMsg = `防衛成功だちゅ！ 現在 第${myPet.rank}位 をキープしてるちゅ！`;
                     }
                     myPet.exp += 20; 
                 } else {
                     if (oppOldRank > myOldRank) {
                         oppPet.rank = myOldRank;
                         myPet.rank = oppOldRank;
-                        rankMsg = `📉 陥落… 第${myOldRank}位 ➡️ 第${oppOldRank}位`;
+                        rankMsg = `陥落だちゅ…。 第${myOldRank}位 から 第${oppOldRank}位 に下がっちゃったちゅ。`;
                     } else {
-                        rankMsg = `🛡️ 相手の防衛成功。(第${myPet.rank}位 変動なし)`;
+                        rankMsg = `相手の防衛成功だちゅ。 第${myPet.rank}位 のまま変動なしだちゅ。`;
                     }
                 }
                 savePets();
 
-                // 💡 AI実況の生成
-                const prompt = `ねずみ実況者としてバトルの結末を150文字以内で熱く語ってちゅ。勝者: ${winnerName}。語尾は「ちゅ」。`;
+                // AI実況の生成
+                const prompt = `ねずみ実況者としてバトルの結末を150文字以内で熱く語ってちゅ。勝者: ${winnerUser.username}。語尾は「ちゅ」。`;
                 let aiCommentary = "死闘すぎて言葉が出ないちゅ…！";
                 try {
                     aiCommentary = await callLocalLLM(prompt);
                 } catch (e) { console.log('実況エラー'); }
 
-                const resultEmbed = new EmbedBuilder()
-                    .setColor(0xFF4500)
-                    .setTitle('🏁 バトルリザルト')
-                    .addFields(
-                        { name: '📊 ランク変動', value: rankMsg },
-                        { name: '🎙️ ねずみの実況', value: aiCommentary }
-                    );
-                
-                // 💡 画像は残したまま、リザルトのEmbedを「追加」して送るちゅ！
-                await interaction.followUp({ embeds: [resultEmbed], ephemeral: false });
+                // 💡 リザルト画像を生成！
+                try {
+                    const resultPng = await generatePetBattleResultCanvas(winnerPet, winnerUser.username, rankMsg, aiCommentary);
+                    const resultAttach = new AttachmentBuilder(resultPng, { name: `battle_result_${Date.now()}.png` });
+
+                    // 💡 最後のバトル画面を上書きして、結果画像を表示するちゅ！
+                    await interaction.editReply({ 
+                        content: '🎊 決着！リザルトボードだちゅ！', 
+                        files: [resultAttach], 
+                        components: [] 
+                    });
+                } catch (err) {
+                    console.error('リザルト描画エラー:', err);
+                    await interaction.followUp({ content: '結果画面の描画に失敗したちゅ…でもランクは保存したちゅ！' });
+                }
             }
         });
+        
     }
 
     else if (interaction.commandName === 'pet_ranking') {

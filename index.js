@@ -1029,21 +1029,25 @@ const generatePetBattleCanvas = async (challenger, opponent, myState, oppState, 
     return await canvas.encode('png');
 };
 // 💡 【追加】ペットバトル・リザルト専用のCanvas画像生成魔法だちゅ！
+// 💡 【修正版】ペットバトル・リザルト専用のCanvas画像生成魔法（はみ出し防止）
 const generatePetBattleResultCanvas = async (winnerPet, winnerUsername, rankMsg, aiCommentary) => {
     const canvasWidth = 600;
     const dummyCanvas = createCanvas(1, 1);
     const dummyCtx = dummyCanvas.getContext('2d');
 
-    // 絵文字取り除きとテキスト整形
     const stripEmoji = (str) => str.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, '').replace(/[\u2600-\u27BF]/g, '').trim();
     const safeRank = stripEmoji(rankMsg);
     const safeComment = stripEmoji(aiCommentary);
 
-    // 高さを測るちゅ
+    const textPadding = 60; // 左右の余白
+    const maxWidth = canvasWidth - (textPadding * 2);
+
+    // 💡 1. 文章の高さを正確に測るちゅ！
     dummyCtx.font = 'bold 22px NotoSansJP';
-    const rankHeight = measureTextHeight(dummyCtx, safeRank, canvasWidth - 120, 32);
+    const rankHeight = measureTextHeight(dummyCtx, safeRank, maxWidth, 32);
+    
     dummyCtx.font = 'italic 20px NotoSansJP';
-    const commentHeight = measureTextHeight(dummyCtx, safeComment, canvasWidth - 120, 28);
+    const commentHeight = measureTextHeight(dummyCtx, safeComment, maxWidth, 28);
 
     // 画像読み込み
     const species = petSpecies.find(s => s.name === winnerPet.name);
@@ -1059,16 +1063,19 @@ const generatePetBattleResultCanvas = async (winnerPet, winnerUsername, rankMsg,
 
     const headerHeight = 120;
     const imgSectionHeight = drawHeight + 40;
-    const boxHeight = (40 + rankHeight) + 30 + (40 + commentHeight) + 60;
-    const canvasHeight = headerHeight + imgSectionHeight + boxHeight;
+
+    // 💡 2. ボックス内の「全ての要素」の高さを足し算して、boxHeightを計算するちゅ！
+    // (勝者名エリア: 80) + (ランク見出し: 40 + 本文: rankHeight) + (間隔: 30) + (実況見出し: 40 + 本文: commentHeight) + (下の余白: 60)
+    const boxContentHeight = 80 + 40 + rankHeight + 30 + 40 + commentHeight + 60;
+    const canvasHeight = headerHeight + imgSectionHeight + boxContentHeight + 40;
 
     const canvas = createCanvas(canvasWidth, canvasHeight);
     const ctx = canvas.getContext('2d');
 
-    // 背景（勝利を祝うゴールドと黒のグラデーション風）
+    // 背景と外枠
     ctx.fillStyle = '#1a1a1a';
     ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-    ctx.strokeStyle = '#FFD700'; // 優勝のゴールド枠
+    ctx.strokeStyle = '#FFD700'; 
     ctx.lineWidth = 12;
     ctx.strokeRect(0, 0, canvasWidth, canvasHeight);
 
@@ -1090,12 +1097,12 @@ const generatePetBattleResultCanvas = async (winnerPet, winnerUsername, rankMsg,
     }
     currentY += imgSectionHeight;
 
-    // リザルトボックス
+    // 💡 3. 計算した boxContentHeight を使って背景を描くちゅ
     ctx.fillStyle = '#2b2d31';
-    ctx.fillRect(40, currentY, canvasWidth - 80, boxHeight - 40);
+    ctx.fillRect(40, currentY, canvasWidth - 80, boxContentHeight);
     ctx.strokeStyle = '#FFD700';
     ctx.lineWidth = 2;
-    ctx.strokeRect(40, currentY, canvasWidth - 80, boxHeight - 40);
+    ctx.strokeRect(40, currentY, canvasWidth - 80, boxContentHeight);
 
     // 勝者名
     ctx.font = 'bold 28px NotoSansJP';
@@ -1106,18 +1113,18 @@ const generatePetBattleResultCanvas = async (winnerPet, winnerUsername, rankMsg,
     ctx.textAlign = 'left';
     ctx.font = 'bold 22px NotoSansJP';
     ctx.fillStyle = '#00FF00';
-    ctx.fillText('📊 ランク変動', 60, currentY + 100);
+    ctx.fillText('📊 ランク変動', 60, currentY + 110);
     ctx.fillStyle = '#ffffff';
-    let nextY = drawCanvasText(ctx, safeRank, 60, currentY + 135, canvasWidth - 120, 32);
+    let nextY = drawCanvasText(ctx, safeRank, 60, currentY + 145, maxWidth, 32);
 
     // AI実況
-    nextY += 20;
+    nextY += 30;
     ctx.font = 'bold 22px NotoSansJP';
     ctx.fillStyle = '#87CEEB';
     ctx.fillText('🎙️ ねずみの実況', 60, nextY);
     ctx.font = 'italic 20px NotoSansJP';
     ctx.fillStyle = '#e0e0e0';
-    drawCanvasText(ctx, safeComment, 60, nextY + 35, canvasWidth - 120, 28);
+    drawCanvasText(ctx, safeComment, 60, nextY + 35, maxWidth, 28);
 
     return await canvas.encode('png');
 };

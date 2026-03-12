@@ -2674,11 +2674,12 @@ client.on('interactionCreate', async (interaction) => {
 
         // 🍣 寿司の注文 (btn_sushi_order)
         // 💡 【超・軽量爆速版】プルダウンで注文した時の処理 (Canvasでお寿司の提供！)
+    // 💡 【超・軽量爆速版】プルダウンで注文した時の処理 (Canvasでお寿司の提供！)
     else if (interaction.isStringSelectMenu() && interaction.customId === 'sushi_select_order') {
         await interaction.deferUpdate(); 
 
-        // 💡 【追加】注文を受け付けたら、元のメッセージのプルダウンメニューを消すちゅ！
-        try { await interaction.editReply({ components: [] }); } catch(e) {}
+        // 💡 修正：メニューを消しつつ、ローディングメッセージで確実に上書きするちゅ！
+        try { await interaction.editReply({ content: '🍣 大将が心を込めて握っているちゅ…お待ちを！', components: [] }); } catch(e) {}
 
         const selectedIndex = parseInt(interaction.values[0], 10);
         const selectedSushi = sushiMenu[selectedIndex];
@@ -2773,15 +2774,17 @@ client.on('interactionCreate', async (interaction) => {
             const pngBuffer = await canvas.encode('png');
             const attachment = new AttachmentBuilder(pngBuffer, { name: 'sushi_canvas.png' });
 
-            await interaction.followUp({ 
+            // 💡 修正：followUp ではなく editReply で元のメッセージごと画像を上書きするちゅ！
+            await interaction.editReply({ 
                 content: `✨ 握りたての **${safeName}** だちゅ！`, 
                 embeds: [], 
+                components: [], // 完全にメニューを消す！
                 files: [attachment]
             });
 
         } catch (error) {
             console.error('Canvas寿司提供エラー:', error);
-            await interaction.followUp({ content: 'お寿司を落としちゃったちゅ…' });
+            await interaction.editReply({ content: 'お寿司を落としちゃったちゅ…', components: [] });
         }
     }
 

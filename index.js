@@ -893,8 +893,10 @@ client.on('interactionCreate', async (interaction) => {
     // 💡 超重要：サーバーIDを判定して「隠す（ephemeral: true）」か「公開する（ephemeral: false）」かを自動で決める魔法だちゅ！
     const isHidden = interaction.guildId !== '1480458980655366188';
 
+    // 💡 【超・軽量爆速版】/tarot コマンド (1枚引きのCanvas画像生成)
     if (interaction.commandName === 'tarot') {
         await interaction.deferReply({ ephemeral: isHidden });
+        await interaction.editReply({ content: '🌌 星の導きを読み解きながら、今日の1枚を描いているちゅ…！🐭🎨' });
 
         const personalSeed = getPersonalDailyRandom(interaction.user.id);
         const cardIndex = Math.floor(personalSeed * tarotCards.length);
@@ -904,25 +906,161 @@ client.on('interactionCreate', async (interaction) => {
         const isReversed = reverseSeed < 0.5;
 
         const mouseWhisper = getSingleCardComment(selectedCard, isReversed);
-        const geminiExplanation = await getGeminiReading(selectedCard.name, isReversed, interaction.user.id);
-        const imageAttachment = await getCardImage(selectedCard.image, isReversed);
+        const geminiPromise = getGeminiReading(selectedCard.name, isReversed, interaction.user.id);
 
-        const embed = new EmbedBuilder()
-            .setColor(isReversed ? 0xFF6347 : 0x00FA9A)
-            .setTitle(`🐭 ${interaction.user.username}さんの今日のお告げ: ${selectedCard.name}`)
-            .setDescription(`**${isReversed ? '逆位置 🙃' : '正位置 ✨'}**`)
-            .addFields(
-                { name: 'カードの意味', value: isReversed ? selectedCard.reversed : selectedCard.upright },
-                { name: 'ねずみのささやき', value: `*「${mouseWhisper}」*` },
-                { name: 'ねずみの特別解説', value: geminiExplanation }
-            )
-            .setFooter({ text: `今日（${getJSTInfo().displayDate}）のお告げはこれって決まってたんだちゅ！` });
+        // 絵文字を取り除く魔法
+        const stripEmoji = (str) => str.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, '').replace(/[\u2600-\u27BF]/g, '');
 
-        if (imageAttachment) {
-            embed.setImage(`attachment://${imageAttachment.name}`);
-            await interaction.editReply({ embeds: [embed], files: [imageAttachment] }); // 💡 editReplyの不要なephemeralを削除して警告を消したちゅ！
-        } else {
-            await interaction.editReply({ embeds: [embed], content: '画像の読み込みに失敗しちゃった、ちゅ……。' });
+        try {
+            // 💡 1. カード画像を読み込み、アスペクト比を計算するちゅ！
+            const cardWidth = 250;
+            let drawHeight = 430; // 仮の高さ
+            let img = null;
+            const imagePath = path.join(__dirname, 'images', selectedCard.image);
+            
+            if (fs.existsSync(imagePath)) {
+                img = await loadImage(imagePath);
+                const aspectRatio = img.width / img.height;
+                drawHeight = cardWidth / Math.max(0.1, aspectRatio);
+            }
+
+            // AIの文章を待つちゅ
+            const geminiExplanation = await geminiPromise;
+            const finalExplanation = geminiExplanation || "運命の糸が絡まってうまく読めなかったちゅ…。";
+            
+            // 安全なテキストに変換
+            const safeExp = stripEmoji(finalExplanation);
+            const safeWhisper = stripEmoji(mouseWhisper);
+            const safeMeaning = stripEmoji(isReversed ? selectedCard.reversed : selectedCard.upright);
+
+            // 💡 2. 文章の高さを測って、キャンバスの縦幅を決めるちゅ！
+            const dummyCanvas = createCanvas(1, 1);
+            const dummyCtx = dummyCanvas.getContext('2d');
+            const maxTextWidth = 600 - 120; // 左右の余白を引いたテキストエリアの幅
+            
+            dummyCtx.font = '18px NotoSansJP';
+            const meaningHeight = measureTextHeight(dummyCtx, safeMeaning, maxTextWidth, 26);
+            
+            dummyCtx.font = 'italic 18px NotoSansJP';
+            const whisperHeight = measureTextHeight(dummyCtx, safeWhisper, maxTextWidth, 26);
+            
+            dummyCtx.font = '18px NotoSansJP';
+            const expHeight = measureTextHeight(dummyCtx, safeExp, maxTextWidth, 26);
+
+            // 枠の中の文字の高さを全部足し算するちゅ
+            // (タイトル高さ+余白+本文高さ) を3項目分足す
+            const boxContentHeight = (24 + 15 + meaningHeight) + 25 + (24 + 15 + whisperHeight) + 25 + (24 + 15 + expHeight);
+            const boxPadding = 40;
+            const boxHeight = boxContentHeight + boxPadding * 2;
+
+            // レイアウトの基準位置（Y座標）
+            const cardAreaTop = 110;
+            const textYStart = cardAreaTop + drawHeight + 35;
+            const boxStartY = textYStart + 60; 
+            
+            const canvasWidth = 600; // 1枚引きだからスリムにするちゅ！
+            const canvasHeight = boxStartY + boxHeight + 50; 
+
+            // 💡 3. ピッタリサイズのキャンバスを作って描画スタート！
+            const canvas = createCanvas(canvasWidth, canvasHeight);
+            const ctx = canvas.getContext('2d');
+
+            // 背景と枠線
+            ctx.fillStyle = '#1e1e24';
+            ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+            ctx.strokeStyle = '#5865F2';
+            ctx.lineWidth = 10;
+            ctx.strokeRect(0, 0, canvasWidth, canvasHeight);
+
+            // タイトル
+            ctx.textAlign = 'center';
+            ctx.font = 'bold 32px NotoSansJP';
+            ctx.fillStyle = '#FFD700';
+            ctx.fillText(`${interaction.user.username}さんの今日のお告げ`, canvasWidth / 2, 60);
+
+            // 💡 カード画像の描画
+            const centerX = canvasWidth / 2;
+            if (img) {
+                ctx.save();
+                ctx.translate(centerX, cardAreaTop + drawHeight / 2);
+                if (isReversed) ctx.rotate(Math.PI);
+                ctx.drawImage(img, -cardWidth / 2, -drawHeight / 2, cardWidth, drawHeight);
+                ctx.restore();
+            } else {
+                ctx.fillStyle = '#333';
+                ctx.fillRect(centerX - cardWidth / 2, cardAreaTop, cardWidth, drawHeight);
+                ctx.fillStyle = '#fff';
+                ctx.font = '16px NotoSansJP';
+                ctx.fillText('画像なし', centerX, cardAreaTop + drawHeight / 2);
+            }
+
+            // カード名と正逆
+            ctx.font = 'bold 24px NotoSansJP';
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(selectedCard.name, centerX, textYStart);
+
+            ctx.font = '20px NotoSansJP';
+            ctx.fillStyle = isReversed ? '#FF6347' : '#e0e0e0';
+            ctx.fillText(isReversed ? '逆位置' : '正位置', centerX, textYStart + 30);
+
+            // 💡 解説エリアの背景
+            ctx.fillStyle = '#2b2d31';
+            ctx.fillRect(40, boxStartY, canvasWidth - 80, boxHeight);
+            ctx.strokeStyle = '#444';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(40, boxStartY, canvasWidth - 80, boxHeight);
+
+            // 💡 解説テキストの描画
+            let textY = boxStartY + 45; 
+            const textX = 60;
+
+            // ① カードの意味
+            ctx.textAlign = 'left';
+            ctx.font = 'bold 22px NotoSansJP';
+            ctx.fillStyle = '#5865F2';
+            ctx.fillText('カードの意味', textX, textY);
+            textY += 30;
+            ctx.font = '18px NotoSansJP';
+            ctx.fillStyle = '#e0e0e0';
+            textY = drawCanvasText(ctx, safeMeaning, textX, textY, maxTextWidth, 26);
+            
+            textY += 25;
+            
+            // ② ねずみのささやき
+            ctx.font = 'bold 22px NotoSansJP';
+            ctx.fillStyle = '#00FA9A';
+            ctx.fillText('ねずみのささやき', textX, textY);
+            textY += 30;
+            ctx.font = 'italic 18px NotoSansJP';
+            ctx.fillStyle = '#e0e0e0';
+            textY = drawCanvasText(ctx, safeWhisper, textX, textY, maxTextWidth, 26);
+
+            textY += 25;
+
+            // ③ ねずみの特別解説 (Gemini)
+            ctx.font = 'bold 22px NotoSansJP';
+            ctx.fillStyle = '#FFD700';
+            ctx.fillText('ねずみの特別解説', textX, textY);
+            textY += 30;
+            ctx.font = '18px NotoSansJP';
+            ctx.fillStyle = '#ffffff';
+            drawCanvasText(ctx, safeExp, textX, textY, maxTextWidth, 26);
+
+            // 日付
+            ctx.textAlign = 'right';
+            ctx.font = '16px NotoSansJP';
+            ctx.fillStyle = '#888';
+            ctx.fillText(`今日（${getJSTInfo().displayDate}）のお告げだちゅ！`, canvasWidth - 50, canvasHeight - 20);
+
+            // 💡 PNG画像に変換して送信！
+            const pngBuffer = await canvas.encode('png');
+            const attachment = new AttachmentBuilder(pngBuffer, { name: 'tarot1_canvas.png' });
+
+            await interaction.editReply({ content: 'お待たせしたちゅ！今日のあなたへのお告げだちゅ！✨', embeds: [], files: [attachment] });
+
+        } catch (error) {
+            console.error('Canvas描画エラー(tarot1):', error);
+            await interaction.editReply({ content: '絵を描く途中で筆が折れちゃったちゅ…。ログを確認してちゅ💦' });
         }
     }
 

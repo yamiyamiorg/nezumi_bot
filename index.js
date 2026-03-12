@@ -3070,8 +3070,8 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     // 💡 修正：バトルとランキングは「どのサーバーでも全員に見える（公開）」のが正しいから、ephemeralの魔法は使わないちゅ！
+    // 💡 【超・軽量爆速版】/pet_battle コマンド (シンタックスエラー修正・完全版)
     else if (interaction.commandName === 'pet_battle') {
-        // バトルはみんなに見えるように ephemeral は使わない設定だちゅ
         await interaction.deferReply(); 
         const challengerId = interaction.user.id;
         const opponentUser = interaction.options.getUser('opponent');
@@ -3097,6 +3097,7 @@ client.on('interactionCreate', async (interaction) => {
         let oppState = initStats(oppPet);
         let turn = 1;
         let battleLog = "⚔️ BATTLE START ⚔️";
+        let isGameOver = false;
 
         const getActionRow = () => new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('btn_atk').setLabel('🗡️ 攻撃').setStyle(ButtonStyle.Danger),
@@ -3105,20 +3106,18 @@ client.on('interactionCreate', async (interaction) => {
             new ButtonBuilder().setCustomId('btn_special').setLabel('🔥 必殺技').setStyle(ButtonStyle.Danger).setDisabled(myState.sp < 10)
         );
 
-        // 💡 ターンごとの画面を生成して送る魔法の関数
+        // 💡 ターン画面生成
         const sendBattleTurn = async (isFinal = false) => {
             const pngBuffer = await generatePetBattleCanvas(myPet, oppPet, myState, oppState, battleLog, turn);
-            // 💡 毎回違う名前（turnを含める）にすることで、Discordのキャッシュを回避するちゅ！
             const attachment = new AttachmentBuilder(pngBuffer, { name: `battle_t${turn}_${Date.now()}.png` });
             
-            await interaction.editReply({ 
+            return await interaction.editReply({ 
                 content: isFinal ? '✨ 決着がついたちゅ！！' : `⚔️ バトル進行中！ (ターン ${turn})`, 
                 files: [attachment], 
                 components: isFinal ? [] : [getActionRow()] 
             });
         };
 
-        // 最初の画面を表示
         await sendBattleTurn();
         
         const message = await interaction.fetchReply();
@@ -3127,17 +3126,14 @@ client.on('interactionCreate', async (interaction) => {
         collector.on('collect', async i => {
             await i.deferUpdate();
             let myAction = i.customId;
-            // 相手（NPC）の行動決定
             let oppAction = (oppState.sp >= 10 && Math.random() < 0.7) ? 'btn_special' : ['btn_atk', 'btn_atk', 'btn_def', 'btn_sp'][Math.floor(Math.random() * 4)];
 
             battleLog = ""; 
 
-            // 💡 ダメージ計算の実行
             const doAction = (isMe, action, isEnemyDefending) => {
                 let attackerBase = isMe ? myPet : oppPet;
                 let attackerState = isMe ? myState : oppState;
                 let defenderState = isMe ? oppState : myState;
-                let defenderBase = isMe ? oppPet : myPet;
 
                 if (action === 'btn_atk') {
                     let dmg = Math.max(1, (attackerState.atk + Math.floor(Math.random() * 4)) - (isEnemyDefending ? defenderState.def * 2 : defenderState.def));
@@ -3158,7 +3154,6 @@ client.on('interactionCreate', async (interaction) => {
                 }
             };
 
-            // 素早さ判定
             if (myState.spd >= oppState.spd) {
                 doAction(true, myAction, oppAction === 'btn_def');
                 if (oppState.hp > 0) doAction(false, oppAction, myAction === 'btn_def');
@@ -3168,73 +3163,66 @@ client.on('interactionCreate', async (interaction) => {
             }
 
             if (myState.hp <= 0 || oppState.hp <= 0) {
+                isGameOver = true;
                 collector.stop();
             } else {
-                turn++; // 💡 ターンを増やす！
-                await sendBattleTurn(); // 💡 次のターンを描画して上書き！
+                turn++;
+                await sendBattleTurn();
             }
         });
 
         collector.on('end', async () => {
-            // 決着がついた時の最終画面
+            // 💡 最終画面を生成
             await sendBattleTurn(true);
 
-        collector.on('end', async () => {
             if (!isGameOver) {
-                battleLog += `\n⏳ タイムアップ！勝負はつかなかったちゅ…。`;
-                return interaction.editReply({ embeds: [updateEmbed()], components: [], files: files });
-            }
-
-            let winnerName = myState.hp > 0 ? interaction.user.username : opponentUser.username;
-            battleLog += `\n\n💀 **決着！！ 勝者：${winnerName}** 💀\n`;
-            
-            let rankMsg = "";
-            let myOldRank = myPet.rank;
-            let oppOldRank = oppPet.rank;
-
-            if (myState.hp > 0) {
-                if (myOldRank > oppOldRank) {
-                    myPet.rank = oppOldRank;
-                    oppPet.rank = myOldRank;
-                    rankMsg = `\n👑 **下剋上達成！！** ${oppPet.name}の座を奪い取ったちゅ！\n(あなたのランク: 第${myOldRank}位 ➡️ **第${oppPet.rank}位**)`;
-                } else {
-                    rankMsg = `\n🛡️ **防衛成功！** 王者の威厳を見せつけたちゅ！(第${myPet.rank}位 防衛)`;
-                }
+                battleLog += `\n⏳ タイムアップだちゅ…。`;
             } else {
-                if (oppOldRank > myOldRank) {
-                    oppPet.rank = myOldRank;
-                    myPet.rank = oppOldRank;
-                    rankMsg = `\n📉 **ランク陥落…** ${oppPet.name}に順位を奪われたちゅ…\n(あなたのランク: 第${myOldRank}位 ➡️ **第${myPet.rank}位**)`;
+                let winnerName = myState.hp > 0 ? interaction.user.username : opponentUser.username;
+                battleLog += `\n💀 決着！！ 勝者：${winnerName} 💀`;
+
+                let rankMsg = "";
+                let myOldRank = myPet.rank;
+                let oppOldRank = oppPet.rank;
+
+                if (myState.hp > 0) {
+                    if (myOldRank > oppOldRank) {
+                        myPet.rank = oppOldRank;
+                        oppPet.rank = myOldRank;
+                        rankMsg = `👑 下剋上達成！！ 第${myOldRank}位 ➡️ 第${oppOldRank}位`;
+                    } else {
+                        rankMsg = `🛡️ 防衛成功！ (第${myPet.rank}位)`;
+                    }
+                    myPet.exp += 20; 
                 } else {
-                    rankMsg = `\n🛡️ **相手の防衛成功…** 壁は高かったちゅ。(第${myPet.rank}位 変動なし)`;
+                    if (oppOldRank > myOldRank) {
+                        oppPet.rank = myOldRank;
+                        myPet.rank = oppOldRank;
+                        rankMsg = `📉 陥落… 第${myOldRank}位 ➡️ 第${oppOldRank}位`;
+                    } else {
+                        rankMsg = `🛡️ 相手の防衛成功。(第${myPet.rank}位 変動なし)`;
+                    }
                 }
+                savePets();
+
+                // 💡 AI実況の生成
+                const prompt = `ねずみ実況者としてバトルの結末を150文字以内で熱く語ってちゅ。勝者: ${winnerName}。語尾は「ちゅ」。`;
+                let aiCommentary = "死闘すぎて言葉が出ないちゅ…！";
+                try {
+                    aiCommentary = await callLocalLLM(prompt);
+                } catch (e) { console.log('実況エラー'); }
+
+                const resultEmbed = new EmbedBuilder()
+                    .setColor(0xFF4500)
+                    .setTitle('🏁 バトルリザルト')
+                    .addFields(
+                        { name: '📊 ランク変動', value: rankMsg },
+                        { name: '🎙️ ねずみの実況', value: aiCommentary }
+                    );
+                
+                // 💡 画像は残したまま、リザルトのEmbedを「追加」して送るちゅ！
+                await interaction.followUp({ embeds: [resultEmbed], ephemeral: false });
             }
-
-            let aiCommentary = "実況を生成中だちゅ...";
-            await interaction.editReply({ embeds: [updateEmbed().addFields({ name: '🎙️ AI実況（生成中...）', value: aiCommentary })], components: [], files: files });
-
-            const promptLog = battleLog.length > 400 ? battleLog.slice(-400) : battleLog;
-            const prompt = `あなたは「ねずみ」という名前の実況者です。以下のペットバトルのログとランク変動を読み、150文字以内で熱く、そしてヒリヒリする雰囲気で勝者を讃える実況をしてください。語尾は「ちゅ」にすること。\n\n勝者: ${winnerName}\nランク変動: ${rankMsg}\nログ: ${promptLog}`;
-
-            try {
-                aiCommentary = await callLocalLLM(prompt);
-            } catch (e) {
-                console.log('AI実況エラーまたはタイムアウト:', e.message);
-                aiCommentary = "激しすぎる戦いで実況マイクが壊れちゃったちゅ！でも素晴らしい死闘だったちゅ！";
-            }
-
-            const finalEmbed = updateEmbed();
-            finalEmbed.addFields(
-                { name: '📊 ランク変動', value: rankMsg },
-                { name: '🎙️ ねずみのAI実況', value: aiCommentary }
-            );
-            
-            if (myState.hp > 0) {
-                myPet.exp += 20;
-            }
-            savePets();
-
-            await interaction.editReply({ embeds: [finalEmbed], components: [], files: files });
         });
     }
 

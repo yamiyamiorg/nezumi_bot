@@ -1128,6 +1128,98 @@ const generatePetBattleResultCanvas = async (winnerPet, winnerUsername, rankMsg,
 
     return await canvas.encode('png');
 };
+// 💡 【追加】ペットランキング専用のCanvas画像生成魔法だちゅ！
+const generatePetRankingCanvas = async (sortedPets) => {
+    const canvasWidth = 800;
+    const stripEmoji = (str) => str.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, '').replace(/[\u2600-\u27BF]/g, '').trim();
+
+    const headerHeight = 150;
+    const panelHeight = 90; // 1人あたりの高さ
+    const panelGap = 15;
+    const footerHeight = 60;
+    
+    // 最大10位まで表示するちゅ
+    const displayCount = Math.min(10, sortedPets.length);
+    const canvasHeight = headerHeight + (panelHeight + panelGap) * displayCount + footerHeight;
+
+    const canvas = createCanvas(canvasWidth, canvasHeight);
+    const ctx = canvas.getContext('2d');
+
+    // 背景（高級感のあるダークグレーとゴールドの枠線）
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+    ctx.strokeStyle = '#FFD700'; 
+    ctx.lineWidth = 10;
+    ctx.strokeRect(0, 0, canvasWidth, canvasHeight);
+
+    // タイトル
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 40px NotoSansJP';
+    ctx.fillStyle = '#FFD700';
+    ctx.fillText('🏆 ペットバトル 殿堂入りランキング 🏆', canvasWidth / 2, 70);
+    
+    ctx.font = '20px NotoSansJP';
+    ctx.fillStyle = '#e0e0e0';
+    ctx.fillText('最強のテイマーたちの記録だちゅ！', canvasWidth / 2, 110);
+
+    let currentY = headerHeight;
+
+    for (let i = 0; i < displayCount; i++) {
+        const pet = sortedPets[i];
+        const rank = i + 1;
+        const startX = 40;
+        const panelWidth = canvasWidth - 80;
+
+        // パネルの色（1位:金, 2位:銀, 3位:銅, その他:ダーク）
+        let panelColor = '#2b2d31';
+        let borderColor = '#444';
+        let rankColor = '#ffffff';
+
+        if (rank === 1) { panelColor = '#4d4400'; borderColor = '#FFD700'; rankColor = '#FFD700'; }
+        else if (rank === 2) { panelColor = '#333333'; borderColor = '#C0C0C0'; rankColor = '#C0C0C0'; }
+        else if (rank === 3) { panelColor = '#3d2b1f'; borderColor = '#CD7F32'; rankColor = '#CD7F32'; }
+
+        ctx.fillStyle = panelColor;
+        ctx.fillRect(startX, currentY, panelWidth, panelHeight);
+        ctx.strokeStyle = borderColor;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(startX, currentY, panelWidth, panelHeight);
+
+        // 順位表示
+        ctx.textAlign = 'left';
+        ctx.font = 'bold 32px NotoSansJP';
+        ctx.fillStyle = rankColor;
+        ctx.fillText(`${rank}位`, startX + 20, currentY + 55);
+
+        // ペット名とテイマー名
+        const safePetName = stripEmoji(pet.name);
+        const userName = pet.userName || '不明なテイマー';
+        
+        ctx.font = 'bold 24px NotoSansJP';
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(safePetName, startX + 120, currentY + 40);
+        
+        ctx.font = '18px NotoSansJP';
+        ctx.fillStyle = '#aaa';
+        ctx.fillText(`テイマー: ${userName} (Lv.${pet.level})`, startX + 120, currentY + 70);
+
+        // 右側のステータスサマリー
+        ctx.textAlign = 'right';
+        ctx.font = 'bold 18px NotoSansJP';
+        ctx.fillStyle = '#87CEEB';
+        ctx.fillText(`HP:${pet.maxHp} ATK:${pet.atk} DEF:${pet.def} SPD:${pet.spd}`, startX + panelWidth - 20, currentY + 55);
+
+        currentY += panelHeight + panelGap;
+    }
+
+    // フッター
+    ctx.textAlign = 'center';
+    ctx.font = '14px NotoSansJP';
+    ctx.fillStyle = '#666';
+    ctx.fillText(`集計日：${getJSTInfo().displayDate}`, canvasWidth / 2, canvasHeight - 25);
+
+    return await canvas.encode('png');
+};
 //**************************************************************************************心の天気図（気分記録）******************************************************************************************** */
 const kibunDataFile = path.join(__dirname, 'kibun.json');
 let userKibun = {}; 
@@ -3330,34 +3422,42 @@ client.on('interactionCreate', async (interaction) => {
         
     }
 
+    // 💡 【超・軽量爆速版】/pet_ranking コマンド (Canvas画像生成版)
     else if (interaction.commandName === 'pet_ranking') {
         await interaction.deferReply();
 
-        const sortedPets = Object.entries(userPets)
-            .map(([userId, pet]) => ({ userId, ...pet }))
-            .sort((a, b) => a.rank - b.rank);
+        // 💡 ユーザー名を取得しつつランキング用に整形するちゅ！
+        const sortedPets = await Promise.all(
+            Object.entries(userPets).map(async ([userId, pet]) => {
+                let userName = '不明なテイマー';
+                try {
+                    const user = await client.users.fetch(userId);
+                    userName = user.username;
+                } catch(e) {}
+                return { userId, userName, ...pet };
+            })
+        );
+        
+        // ランク順に並べるちゅ
+        sortedPets.sort((a, b) => a.rank - b.rank);
 
         if (sortedPets.length === 0) {
             return interaction.editReply({ content: 'まだ誰も相棒を持っていないちゅ…。' });
         }
 
-        const embed = new EmbedBuilder()
-            .setColor(0xFFD700)
-            .setTitle('🏆 ペットバトル 公式ランキング 🏆')
-            .setDescription('血で血を洗う闘技場の頂点に立つのは誰だちゅ！');
+        try {
+            // 💡 ランキング画像を生成！
+            const pngBuffer = await generatePetRankingCanvas(sortedPets);
+            const attachment = new AttachmentBuilder(pngBuffer, { name: `ranking_${Date.now()}.png` });
 
-        sortedPets.slice(0, 10).forEach((pet, index) => {
-            const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '🏅';
-            const userName = client.users.cache.get(pet.userId)?.username || '不明なテイマー';
-
-            embed.addFields({
-                name: `${medal} 第${pet.rank}位：${pet.name} ${pet.emoji}`,
-                value: `テイマー: ${userName} | Lv.${pet.level}\n❤️ HP:${pet.maxHp} | 🗡️ ATK:${pet.atk} | 🛡️ DEF:${pet.def}\n💨 SPD:${pet.spd} | 🧠 SP:${pet.maxSp} | 💫 混乱:${pet.staggerMax}`,
-                inline: false
+            await interaction.editReply({ 
+                content: '🏆 現在のトップテイマーたちの記録だちゅ！', 
+                files: [attachment] 
             });
-        });
-
-        await interaction.editReply({ embeds: [embed] });
+        } catch (error) {
+            console.error('ランキング描画エラー:', error);
+            await interaction.editReply({ content: 'ランキングボードが重すぎて持ち上げられなかったちゅ…💦' });
+        }
     }
 
     else if (interaction.commandName === 'pet_release') {

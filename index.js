@@ -1629,6 +1629,7 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     // 💡 【超・軽量爆速版】/horoscope コマンド (Canvasを使った1枚絵の星座占い)
+    // 💡 【超・軽量爆速版】/horoscope コマンド (Canvasを使った1枚絵の星座占い・空欄対策版)
     else if (interaction.commandName === 'horoscope') {
         await interaction.deferReply({ ephemeral: isHidden });
         await interaction.editReply({ content: '🌌 星座の瞬きを読み解いて、占いボードを描いているちゅ…！🐭🎨' });
@@ -1643,23 +1644,43 @@ client.on('interactionCreate', async (interaction) => {
         const fullMessage = await getGeminiFullHoroscope(ranking);
         const lines = fullMessage.split('\n');
         
-        const houfuLine = lines.find(l => l.includes('抱負'));
-        const rawHoufu = houfuLine ? (houfuLine.split(/[：:]/)[1] || houfuLine).replace(/\*/g, '').trim() : "楽しく過ごそうちゅ！";
+        // 💡 修正：抱負が空欄になるのを防ぐ、完璧な読み取り魔法だちゅ！
+        let rawHoufu = "楽しく過ごそうちゅ！";
+        const houfuIndex = lines.findIndex(l => l.includes('抱負'));
+        if (houfuIndex !== -1) {
+            const parts = lines[houfuIndex].split(/[：:]/);
+            let extracted = parts.slice(1).join(':').trim(); // コロン以降を取得（スペースは取り除く）
+            
+            // 「抱負：」の後に改行して次の行に書かれている場合の対策
+            if (extracted === '' && lines.length > houfuIndex + 1) {
+                extracted = lines.slice(houfuIndex + 1).join(' ').trim();
+            }
+            
+            if (extracted !== '') {
+                rawHoufu = extracted.replace(/\*/g, '');
+            }
+        }
 
-        // 💡 絵文字を取り除く魔法（Canvasの文字化け防止！）
+        // 絵文字を取り除く魔法（Canvasの文字化け防止！）
         const stripEmoji = (str) => str.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, '').replace(/[\u2600-\u27BF]/g, '').trim();
-        const safeHoufu = stripEmoji(rawHoufu);
+        
+        let safeHoufu = stripEmoji(rawHoufu);
+        
+        // 💡 安全装置：絵文字だけで消えちゃったり、取得失敗した時はデフォルトの言葉を入れるちゅ！
+        if (!safeHoufu || safeHoufu === '') {
+            safeHoufu = "今日も1日、自分のペースで楽しく過ごそうちゅ！";
+        }
 
         try {
             const canvasWidth = 800;
             const dummyCanvas = createCanvas(1, 1);
             const dummyCtx = dummyCanvas.getContext('2d');
             
-            // 💡 1. 抱負の高さと、各星座のパネル高さを事前計算するちゅ！
+            // 抱負の高さ計算
             dummyCtx.font = 'italic 20px NotoSansJP';
             const houfuHeight = measureTextHeight(dummyCtx, safeHoufu, canvasWidth - 120, 28);
             
-            const headerHeight = 180 + houfuHeight; // タイトル + 抱負エリアの高さ
+            const headerHeight = 180 + houfuHeight; 
             
             const panelsData = [];
             let totalPanelsHeight = 0;
@@ -1668,9 +1689,8 @@ client.on('interactionCreate', async (interaction) => {
             for (let i = 0; i < ranking.length; i++) {
                 const item = ranking[i];
                 
-                // 順位ごとのコメントを探すちゅ
                 const targetLine = lines.find(l => l.includes(`${i+1}位`));
-                let comment = "応援してるちゅ！";
+                let comment = "";
                 if (targetLine) {
                     const parts = targetLine.split(/[：:]/);
                     if (parts.length > 1) {
@@ -1679,15 +1699,19 @@ client.on('interactionCreate', async (interaction) => {
                         comment = targetLine.replace(new RegExp(`.*${i+1}位.*`), '').replace(/\*/g, '').trim();
                     }
                 }
-                // 星座名が被っていたら消してスッキリさせるちゅ
                 comment = comment.replace(new RegExp(`${item.name}[:：]?`), '').trim();
-                const safeComment = stripEmoji(comment);
+                
+                let safeComment = stripEmoji(comment);
+                
+                // 💡 各星座のコメントも空欄にならないように安全装置を追加だちゅ！
+                if (!safeComment || safeComment === '') {
+                    safeComment = "今日はきっといいことがあるちゅ！応援してるちゅ！";
+                }
 
                 dummyCtx.font = '18px NotoSansJP';
                 const commentWidth = canvasWidth - 120;
                 const commentHeight = measureTextHeight(dummyCtx, safeComment, commentWidth, 26);
                 
-                // 1〜3位はラッキーアイテムも表示するから高さを広めにとるちゅ
                 const isTop3 = i < 3;
                 const extraHeight = isTop3 ? 30 : 0;
                 const panelHeight = 40 + commentHeight + extraHeight + panelPadding * 2;
@@ -1708,7 +1732,7 @@ client.on('interactionCreate', async (interaction) => {
             const footerHeight = 60;
             const canvasHeight = headerHeight + totalPanelsHeight + footerHeight;
 
-            // 💡 2. キャンバスを作って描画スタート！
+            // キャンバスを作って描画スタート！
             const canvas = createCanvas(canvasWidth, canvasHeight);
             const ctx = canvas.getContext('2d');
 
@@ -1724,7 +1748,7 @@ client.on('interactionCreate', async (interaction) => {
             ctx.fillStyle = '#FFD700';
             ctx.fillText(`ねずみ星座占い（${getJSTInfo().displayDate}）`, canvasWidth / 2, 60);
 
-            // 💡 抱負エリア
+            // 抱負エリア
             ctx.fillStyle = '#2b2d31';
             ctx.fillRect(40, 90, canvasWidth - 80, 50 + houfuHeight);
             ctx.strokeStyle = '#FFD700';
@@ -1740,7 +1764,7 @@ client.on('interactionCreate', async (interaction) => {
             ctx.fillStyle = '#ffffff';
             drawCanvasText(ctx, safeHoufu, 60, 160, canvasWidth - 120, 28);
 
-            // 💡 各星座のパネルを描画
+            // 各星座のパネルを描画
             let currentY = headerHeight;
             const startX = 40;
             const panelWidth = canvasWidth - 80;

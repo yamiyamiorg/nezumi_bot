@@ -603,6 +603,136 @@ async function getGeminiRuneReading(runeName, isReversed, username) {
         }
     }
 }
+//******************************************************************************************寿司******************************************************************************************************* */
+const generateOaisoCanvas = async (game, state, extraMsg, displayImageName) => {
+        const canvasWidth = 600;
+        const dummyCanvas = createCanvas(1, 1);
+        const dummyCtx = dummyCanvas.getContext('2d');
+
+        const orderText = game.orderedItems.length > 0 ? game.orderedItems.join('、') : 'まだ注文はないちゅ';
+        
+        // テキストの高さを事前計算
+        dummyCtx.font = '20px NotoSansJP';
+        const orderTextHeight = measureTextHeight(dummyCtx, orderText, canvasWidth - 120, 30);
+
+        dummyCtx.font = 'bold 22px NotoSansJP';
+        const msgHeight = extraMsg ? measureTextHeight(dummyCtx, extraMsg, canvasWidth - 120, 32) : 0;
+
+        // 💡 新規追加：画像の読み込みと高さ計算！
+        let img = null;
+        let imgDrawHeight = 0;
+        const imgContentWidth = 500; // 画像の横幅を500pxに固定
+        
+        if (displayImageName) {
+            const imagePath = path.join(__dirname, 'images', displayImageName);
+            if (fs.existsSync(imagePath)) {
+                img = await loadImage(imagePath);
+                const aspectRatio = img.width / img.height;
+                // アスペクト比を維持して高さを割り出すちゅ！
+                imgDrawHeight = imgContentWidth / Math.max(0.1, aspectRatio); 
+            }
+        }
+
+        // 各パーツの高さ
+        const headerHeight = 100;
+        // 💡 画像があれば、画像の高さ＋上下の余白(40px)を足すちゅ
+        const imgSectionHeight = img ? (imgDrawHeight + 40) : 0; 
+        const infoBoxHeight = 140; 
+        const orderBoxHeight = 60 + orderTextHeight;
+        const msgBoxHeight = extraMsg ? 40 + msgHeight : 0;
+        const padding = 20;
+
+        // 💡 全体のキャンバス高さを決定（画像スペース分だけ自動で縦に伸びるちゅ！）
+        const canvasHeight = headerHeight + imgSectionHeight + infoBoxHeight + padding + orderBoxHeight + padding + msgBoxHeight + padding + 40;
+
+        const canvas = createCanvas(canvasWidth, canvasHeight);
+        const ctx = canvas.getContext('2d');
+
+        // 結果発表時の色（ピタリ賞:金, 惜しい:緑, 外れ:赤, プレイ中:木の色）
+        let mainColor = '#d4a373';
+        if (state === 'result') {
+            const diff = Math.abs(game.currentTotal - game.target);
+            if (diff === 0) mainColor = '#FFD700';
+            else if (diff <= 200) mainColor = '#00FA9A';
+            else mainColor = '#ff6b6b';
+        }
+
+        // 背景と枠線（お寿司屋さんの木目調）
+        ctx.fillStyle = '#2c221a'; 
+        ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+        ctx.strokeStyle = mainColor;
+        ctx.lineWidth = 10;
+        ctx.strokeRect(0, 0, canvasWidth, canvasHeight);
+
+        // タイトル
+        ctx.textAlign = 'center';
+        ctx.font = 'bold 36px NotoSansJP';
+        ctx.fillStyle = mainColor;
+        ctx.fillText(state === 'result' ? 'おあいそ結果発表！！' : 'おあいそゲーム！', canvasWidth / 2, 60);
+
+        let currentY = headerHeight;
+
+        // 💡 0. 画像の描画（大将 または 寿司）
+        if (img) {
+            const imgX = (canvasWidth - imgContentWidth) / 2;
+            ctx.drawImage(img, imgX, currentY, imgContentWidth, imgDrawHeight);
+            // 写真風の白い枠線をつけるちゅ
+            ctx.strokeStyle = '#faedcd';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(imgX, currentY, imgContentWidth, imgDrawHeight);
+            
+            // 次のパーツのためにY座標を進めるちゅ
+            currentY += imgDrawHeight + 40; 
+        }
+
+        // ① 情報ボックス (目標金額と現在の合計)
+        ctx.fillStyle = '#3e2f23';
+        ctx.fillRect(40, currentY, canvasWidth - 80, infoBoxHeight);
+        ctx.strokeStyle = '#5a4535';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(40, currentY, canvasWidth - 80, infoBoxHeight);
+
+        ctx.textAlign = 'center';
+        ctx.font = 'bold 26px NotoSansJP';
+        ctx.fillStyle = '#fefae0';
+        ctx.fillText(`目標金額: ${game.target}円`, canvasWidth / 2, currentY + 45);
+        
+        ctx.font = 'bold 32px NotoSansJP';
+        ctx.fillStyle = state === 'result' ? mainColor : '#87CEEB';
+        ctx.fillText(`現在の合計: ${state === 'result' ? game.currentTotal : '？？？'} 円`, canvasWidth / 2, currentY + 100);
+
+        currentY += infoBoxHeight + padding;
+
+        // ② 注文履歴ボックス
+        ctx.fillStyle = '#3e2f23';
+        ctx.fillRect(40, currentY, canvasWidth - 80, orderBoxHeight);
+        ctx.strokeRect(40, currentY, canvasWidth - 80, orderBoxHeight);
+
+        ctx.textAlign = 'left';
+        ctx.font = 'bold 22px NotoSansJP';
+        ctx.fillStyle = '#d4a373';
+        ctx.fillText('注文履歴', 60, currentY + 40);
+
+        ctx.font = '20px NotoSansJP';
+        ctx.fillStyle = '#e0e0e0';
+        drawCanvasText(ctx, orderText, 60, currentY + 80, canvasWidth - 120, 30);
+
+        currentY += orderBoxHeight + padding;
+
+        // ③ メッセージボックス
+        if (extraMsg) {
+            ctx.fillStyle = '#3e2f23';
+            ctx.fillRect(40, currentY, canvasWidth - 80, msgBoxHeight);
+            ctx.strokeRect(40, currentY, canvasWidth - 80, msgBoxHeight);
+
+            ctx.textAlign = 'left';
+            ctx.font = 'bold 22px NotoSansJP';
+            ctx.fillStyle = '#ffffff';
+            drawCanvasText(ctx, extraMsg, 60, currentY + 40, canvasWidth - 120, 32);
+        }
+
+        return await canvas.encode('png');
+    };
 //**************************************************************************************目指せネズミマスター******************************************************************************************** */
 const petDataFile = path.join(__dirname, 'pets.json');
 
@@ -2245,18 +2375,25 @@ client.on('interactionCreate', async (interaction) => {
                 .setStyle(ButtonStyle.Success)
         );
 
-        const embed = new EmbedBuilder()
-            .setColor(0x5865F2)
-            .setTitle('💰 おあいそゲーム！大将と勝負だちゅ！')
-            .setDescription(`目標金額は **${targetPrice}円** だちゅ！\n下のリストから寿司を追加して、ぴったりを狙ってちゅ。\n（値段は『寿司リスト』で確認しておくか、大将の顔色を読んで予想してね！）`)
-            .addFields(
-                { name: '現在の合計', value: '？？？ 円', inline: true },
-                { name: '目標金額', value: `${targetPrice}円`, inline: true }
-            );
+        try {
+            const extraMsg = "下のリストから寿司を追加して、ぴったりを狙ってちゅ！\n（値段は大将の顔色を読んで予想してね！）";
+            // 💡 最初は大将（daisho.jpg）を表示するちゅ！
+            const pngBuffer = await generateOaisoCanvas(oaisoGames.get(interaction.user.id), 'playing', extraMsg, 'daisho.jpg');
+            const attachment = new AttachmentBuilder(pngBuffer, { name: 'oaiso_start.png' });
 
-        await interaction.editReply({ embeds: [embed], components: [selectRow, buttonRow] });
+            await interaction.editReply({ 
+                content: '大将と勝負だちゅ！🍣', 
+                embeds: [], 
+                files: [attachment], 
+                components: [selectRow, buttonRow] 
+            });
+        } catch (e) {
+            console.error('おあいそ開始エラー:', e);
+            await interaction.editReply({ content: 'のれんを出すのに失敗したちゅ…' });
+        }
     }
 
+    // 💡 【超・軽量爆速版】注文追加時の処理 (注文した寿司の画像！)
     else if (interaction.isStringSelectMenu() && interaction.customId === 'oaiso_add_item') {
         await interaction.deferUpdate();
         const userId = interaction.user.id;
@@ -2270,19 +2407,25 @@ client.on('interactionCreate', async (interaction) => {
         game.currentTotal += selectedSushi.price;
         game.orderedItems.push(selectedSushi.name);
 
-        const embed = new EmbedBuilder()
-            .setColor(0x5865F2)
-            .setTitle('🍣 注文を追加したちゅ！')
-            .setDescription(`へいお待ち！ **${selectedSushi.name}** を追加したちゅ。`)
-            .addFields(
-                { name: '現在の合計', value: `？？？ 円`, inline: true },
-                { name: '目標金額', value: `${game.target}円`, inline: true },
-                { name: '注文履歴', value: game.orderedItems.join('、') || 'なし' }
-            );
+        try {
+            const extraMsg = `へいお待ち！ ${selectedSushi.name} を追加したちゅ。`;
+            // 💡 注文が通ったら、選んだ寿司（selectedSushi.image）を表示するちゅ！
+            const pngBuffer = await generateOaisoCanvas(game, 'playing', extraMsg, selectedSushi.image);
+            const attachment = new AttachmentBuilder(pngBuffer, { name: 'oaiso_update.png' });
 
-        await interaction.followUp({ embeds: [embed], ephemeral: isHidden });
+            await interaction.followUp({ 
+                content: '注文を追加したちゅ！🍣', 
+                embeds: [], 
+                files: [attachment], 
+                ephemeral: isHidden 
+            });
+        } catch (e) {
+            console.error('注文追加エラー:', e);
+            await interaction.followUp({ content: '注文が通らなかったちゅ…', ephemeral: isHidden });
+        }
     }
 
+    // 💡 【超・軽量爆速版】おあいそボタンを押した時の結果発表 (大将の画像に戻る！)
     else if (interaction.isButton() && interaction.customId === 'oaiso_bill_please') {
         await interaction.deferUpdate();
         const userId = interaction.user.id;
@@ -2292,32 +2435,33 @@ client.on('interactionCreate', async (interaction) => {
 
         const diff = game.currentTotal - game.target;
         let resultMsg = "";
-        let color = 0x00FF00;
 
         if (diff === 0) {
-            resultMsg = `🎉 **ピッタシだちゅ！！すごいちゅ！！** 🎉\n大将も脱帽だちゅ、この勘の良さは本物だちゅ！✨🧀`;
-            color = 0xFFD700; 
+            resultMsg = `ピッタシだちゅ！！すごいちゅ！！\n大将も脱帽だちゅ、この勘の良さは本物だちゅ！`;
         } else if (Math.abs(diff) <= 200) {
-            resultMsg = `😲 **惜しいちゅ！あとちょっとだったちゅ！**\n（差額: ${diff}円）。大将もヒヤヒヤしたちゅ、次はイケるちゅ！`;
-            color = 0x00FA9A;
+            resultMsg = `惜しいちゅ！あとちょっとだったちゅ！\n（差額: ${Math.abs(diff)}円）。大将もヒヤヒヤしたちゅ、次はイケるちゅ！`;
         } else {
-            resultMsg = `😢 **あちゃ〜、大外れだちゅ…。**\n（差額: ${diff}円）。勘が鈍ってるちゅ、ひまわりの種でも食べて出直してちゅ！🐭💨`;
-            color = 0xFF4500;
+            resultMsg = `あちゃ〜、大外れだちゅ…。\n（差額: ${Math.abs(diff)}円）。勘が鈍ってるちゅ、ひまわりの種でも食べて出直してちゅ！`;
         }
 
-        const embed = new EmbedBuilder()
-            .setColor(color)
-            .setTitle('💰 おあいそ結果発表！！💰')
-            .setDescription(resultMsg)
-            .addFields(
-                { name: '最終合計', value: `${game.currentTotal}円`, inline: true },
-                { name: '目標金額', value: `${game.target}円`, inline: true },
-                { name: '注文したネタ', value: game.orderedItems.join('、') || 'なし' }
-            )
-            .setFooter({ text: '※ゲームは終了したちゅ。また勝負してちゅ！' });
+        try {
+            // 💡 結果発表は、大将（daisho.jpg）に戻して反応を見せるちゅ！
+            const pngBuffer = await generateOaisoCanvas(game, 'result', resultMsg, 'daisho.jpg');
+            const attachment = new AttachmentBuilder(pngBuffer, { name: 'oaiso_result.png' });
 
-        oaisoGames.delete(userId);
-        await interaction.followUp({ embeds: [embed], components: [], ephemeral: isHidden });
+            oaisoGames.delete(userId);
+            
+            await interaction.followUp({ 
+                content: 'おあいそだちゅ！結果は…？🍣', 
+                embeds: [], 
+                components: [], 
+                files: [attachment], 
+                ephemeral: isHidden 
+            });
+        } catch (e) {
+            console.error('おあいそ結果エラー:', e);
+            await interaction.followUp({ content: '計算機が壊れちゃったちゅ…', ephemeral: isHidden });
+        }
     }
 
     else if (interaction.commandName === 'pet_catch') {

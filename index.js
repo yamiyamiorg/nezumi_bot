@@ -1510,43 +1510,121 @@ client.on('interactionCreate', async (interaction) => {
     }
     
 
+    // 💡 【超・軽量爆速版】/quiz コマンド (Canvasを使った動的クイズ画面)
     else if (interaction.commandName === 'quiz') {
         await interaction.deferReply({ ephemeral: isHidden });
+        
         const isNezumi = Math.random() < 0.5;
         let category = isNezumi ? (Math.random() < 0.5 ? 'mouse' : 'rat') : 'not_mouse';
         const chosen = extraImages[category][Math.floor(Math.random() * extraImages[category].length)];
-        const attachment = await getJokeImage(chosen.file);
+        const imagePath = path.resolve(__dirname, 'images', chosen.file);
 
-        if (!attachment) return interaction.editReply({ content: '画像がお散歩中で見つからないちゅ…。' });
-
-        const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('correct_nezumi').setLabel('ねずみだちゅ！').setEmoji('🐭').setStyle(ButtonStyle.Success),
-            new ButtonBuilder().setCustomId('incorrect_nezumi').setLabel('ねずみじゃない！').setEmoji('❌').setStyle(ButtonStyle.Danger)
-        );
-
-        const embed = new EmbedBuilder()
-            .setColor(0xFFA500)
-            .setTitle('❓ ねずみクイズ！')
-            .setDescription('この画像の子は「ねずみ」かな？\n下のボタンを押して答えてね！')
-            .setImage(`attachment://${attachment.name}`);
-
-        const response = await interaction.editReply({ embeds: [embed], files: [attachment], components: [row] });
-        const filter = i => i.user.id === interaction.user.id;
+        if (!fs.existsSync(imagePath)) {
+            return interaction.editReply({ content: '画像がお散歩中で見つからないちゅ…。' });
+        }
 
         try {
-            const confirmation = await response.awaitMessageComponent({ filter, time: 30000 });
-            const userChoice = (confirmation.customId === 'correct_nezumi');
-            const isCorrect = (userChoice === isNezumi);
+            // 💡 1. 画像を読み込んでアスペクト比を計算！
+            const img = await loadImage(imagePath);
+            const canvasWidth = 600;
+            const contentWidth = 500;
+            
+            const aspectRatio = img.width / img.height;
+            const drawHeight = contentWidth / Math.max(0.1, aspectRatio);
+            
+            // キャンバス高さを決定
+            const headerHeight = 120;
+            const footerHeight = 40;
+            const canvasHeight = headerHeight + drawHeight + footerHeight;
 
-            const resultEmbed = new EmbedBuilder()
-                .setColor(isCorrect ? 0x00FF00 : 0xFF0000)
-                .setTitle(isCorrect ? '✨ 正解だちゅ！' : 'あちゃ〜、残念だちゅ…')
-                .setDescription(`この子の正体は **${chosen.name}** でした！`)
-                .setFooter({ text: isCorrect ? 'ねずみマスターだね！' : '次は当ててみてね！' });
+            // 💡 2. キャンバスを作る魔法の関数（問題用と結果用で使い回すちゅ！）
+            const buildQuizCanvas = async (isResult = false, isCorrect = false) => {
+                const canvas = createCanvas(canvasWidth, canvasHeight);
+                const ctx = canvas.getContext('2d');
 
-            await confirmation.update({ content: isCorrect ? '🎊 おめでとう！' : '😢 どんまいだちゅ…', embeds: [resultEmbed], components: [] });
-        } catch (e) {
-            await interaction.editReply({ content: '時間切れだちゅ…。また遊んでね！', components: [] });
+                // 枠線の色 (出題中:オレンジ, 正解:緑, 不正解:赤)
+                let themeColor = isResult ? (isCorrect ? '#00FF00' : '#FF0000') : '#FFA500';
+
+                // 背景と枠線
+                ctx.fillStyle = '#1e1e24';
+                ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+                ctx.strokeStyle = themeColor;
+                ctx.lineWidth = 10;
+                ctx.strokeRect(0, 0, canvasWidth, canvasHeight);
+
+                ctx.textAlign = 'center';
+                
+                // タイトルとサブタイトルの文字を描画（※文字化け防止のため絵文字はナシだちゅ）
+                if (!isResult) {
+                    ctx.font = 'bold 36px NotoSansJP';
+                    ctx.fillStyle = themeColor;
+                    ctx.fillText('ねずみクイズ！', canvasWidth / 2, 50);
+                    ctx.font = '20px NotoSansJP';
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillText('この画像の子は「ねずみ」かな？', canvasWidth / 2, 90);
+                } else {
+                    ctx.font = 'bold 36px NotoSansJP';
+                    ctx.fillStyle = themeColor;
+                    ctx.fillText(isCorrect ? '正解だちゅ！' : 'あちゃ〜、残念だちゅ…', canvasWidth / 2, 50);
+                    ctx.font = '20px NotoSansJP';
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillText(`この子の正体は ${chosen.name} でした！`, canvasWidth / 2, 90);
+                }
+
+                // 写真の描画（アスペクト比維持！）
+                const imgX = (canvasWidth - contentWidth) / 2;
+                const imgY = headerHeight;
+                ctx.drawImage(img, imgX, imgY, contentWidth, drawHeight);
+                
+                // 写真の白い枠線
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 4;
+                ctx.strokeRect(imgX, imgY, contentWidth, drawHeight);
+
+                return await canvas.encode('png');
+            };
+
+            // 💡 3. まずは「問題の画像」を作って送信するちゅ！
+            const questionPng = await buildQuizCanvas(false, false);
+            const attachment = new AttachmentBuilder(questionPng, { name: 'quiz_canvas.png' });
+
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('correct_nezumi').setLabel('ねずみだちゅ！').setEmoji('🐭').setStyle(ButtonStyle.Success),
+                new ButtonBuilder().setCustomId('incorrect_nezumi').setLabel('ねずみじゃない！').setEmoji('❌').setStyle(ButtonStyle.Danger)
+            );
+
+            const response = await interaction.editReply({ 
+                content: '❓ クイズの時間だちゅ！下のボタンから選んでね！', 
+                embeds: [], // 古いEmbedが残らないように空にするちゅ
+                files: [attachment], 
+                components: [row] 
+            });
+
+            const filter = i => i.user.id === interaction.user.id;
+            
+            try {
+                // 💡 4. ボタンが押されるのを待つちゅ（30秒）
+                const confirmation = await response.awaitMessageComponent({ filter, time: 30000 });
+                const userChoice = (confirmation.customId === 'correct_nezumi');
+                const isCorrect = (userChoice === isNezumi);
+
+                // 💡 5. ボタンが押されたら「結果の画像」を作り直して上書きするちゅ！
+                const resultPng = await buildQuizCanvas(true, isCorrect);
+                const resultAttachment = new AttachmentBuilder(resultPng, { name: 'quiz_result.png' });
+
+                await confirmation.update({ 
+                    content: isCorrect ? '🎊 おめでとう！ねずみマスターだちゅ！' : '😢 どんまいだちゅ…次は当ててね！', 
+                    files: [resultAttachment], 
+                    components: [] // ボタンを消すちゅ
+                });
+            } catch (e) {
+                // 時間切れの場合
+                await interaction.editReply({ content: '時間切れだちゅ…。また遊んでね！', components: [] });
+            }
+
+        } catch (error) {
+            console.error('Canvasクイズエラー:', error);
+            await interaction.editReply({ content: 'クイズの準備中にエラーが起きたちゅ…。' });
         }
     }
 

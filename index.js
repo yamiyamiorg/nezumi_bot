@@ -2673,27 +2673,24 @@ client.on('interactionCreate', async (interaction) => {
         }
 
         // 🍣 寿司の注文 (btn_sushi_order)
-        else if (interaction.customId === 'btn_sushi_order') {
-            const sushiOptions = sushiMenu.map((item, index) => ({
-            label: `${item.name} - ${item.price}円`,
-            description: item.description,
-            value: index.toString(), 
-            emoji: '🍣'
-        }));
+        // 💡 【超・軽量爆速版】プルダウンで注文した時の処理 (Canvasでお寿司の提供！)
+    else if (interaction.isStringSelectMenu() && interaction.customId === 'sushi_select_order') {
+        await interaction.deferUpdate(); 
 
-        const row = new ActionRowBuilder().addComponents(
-            new StringSelectMenuBuilder()
-                .setCustomId('sushi_select_order')
-                .setPlaceholder('どのネタを見るちゅか？✨')
-                .addOptions(sushiOptions)
-        );
+        // 💡 【追加】注文を受け付けたら、元のメッセージのプルダウンメニューを消すちゅ！
+        try { await interaction.editReply({ components: [] }); } catch(e) {}
+
+        const selectedIndex = parseInt(interaction.values[0], 10);
+        const selectedSushi = sushiMenu[selectedIndex];
+
+        // 絵文字を取り除く魔法（文字化け防止）
+        const stripEmoji = (str) => str.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, '').replace(/[\u2600-\u27BF]/g, '').trim();
 
         try {
-            // 💡 1. 大将の画像を読み込んでアスペクト比を計算！
-            const imagePath = path.join(__dirname, 'images', 'daisho.jpg');
+            const imagePath = path.join(__dirname, 'images', selectedSushi.image);
             const canvasWidth = 600;
             const contentWidth = 500;
-            let drawHeight = 300; 
+            let drawHeight = 300;
             let img = null;
 
             if (fs.existsSync(imagePath)) {
@@ -2702,65 +2699,91 @@ client.on('interactionCreate', async (interaction) => {
                 drawHeight = contentWidth / Math.max(0.1, aspectRatio);
             }
 
-            const headerHeight = 120;
-            const footerHeight = 80;
-            const canvasHeight = headerHeight + drawHeight + footerHeight;
+            const safeName = stripEmoji(selectedSushi.name);
+            const safeDesc = stripEmoji(selectedSushi.description);
 
-            // 💡 2. キャンバスを作る（お寿司屋さんらしい木目調デザインだちゅ！）
+            // 💡 1. 説明文の高さを測るちゅ
+            const dummyCanvas = createCanvas(1, 1);
+            const dummyCtx = dummyCanvas.getContext('2d');
+            dummyCtx.font = '22px NotoSansJP';
+            const descHeight = measureTextHeight(dummyCtx, safeDesc, contentWidth - 40, 32);
+
+            const headerHeight = 100;
+            const textYStart = headerHeight + drawHeight + 30;
+            const boxHeight = 50 + descHeight + 40; // ネタ名・値段エリア + 説明文エリア + 余白
+            const canvasHeight = textYStart + boxHeight + 40;
+
+            // 💡 2. お寿司提供用キャンバスを作る！
             const canvas = createCanvas(canvasWidth, canvasHeight);
             const ctx = canvas.getContext('2d');
 
-            // 背景と枠線 (木目カラー)
-            ctx.fillStyle = '#2c221a'; // 濃い木の色
+            // 背景と枠線 (和風の漆器やお皿をイメージしたカラー)
+            ctx.fillStyle = '#1e1e24';
             ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-            ctx.strokeStyle = '#d4a373'; // 明るい木の色
+            ctx.strokeStyle = '#00FA9A'; // 新鮮さを表すグリーン
             ctx.lineWidth = 10;
             ctx.strokeRect(0, 0, canvasWidth, canvasHeight);
 
             // タイトル
             ctx.textAlign = 'center';
             ctx.font = 'bold 36px NotoSansJP';
-            ctx.fillStyle = '#fefae0';
-            ctx.fillText('🍣 ねずみ寿司へようこそ！', canvasWidth / 2, 60);
-            
-            ctx.font = '20px NotoSansJP';
-            ctx.fillText('ウチ自慢のネタを見てってちゅ！', canvasWidth / 2, 95);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText('へいお待ち！', canvasWidth / 2, 60);
 
-            // 大将の画像を描画
+            // 💡 お寿司画像の描画
             const imgX = (canvasWidth - contentWidth) / 2;
             const imgY = headerHeight;
             if (img) {
                 ctx.drawImage(img, imgX, imgY, contentWidth, drawHeight);
-                ctx.strokeStyle = '#faedcd';
+                ctx.strokeStyle = '#ffffff';
                 ctx.lineWidth = 4;
                 ctx.strokeRect(imgX, imgY, contentWidth, drawHeight);
             } else {
                 ctx.fillStyle = '#333';
                 ctx.fillRect(imgX, imgY, contentWidth, drawHeight);
                 ctx.fillStyle = '#fff';
-                ctx.fillText('大将はお出かけ中だちゅ', canvasWidth / 2, imgY + drawHeight / 2);
+                ctx.fillText('画像なし', canvasWidth / 2, imgY + drawHeight / 2);
             }
 
+            // 💡 お寿司の情報枠
+            ctx.fillStyle = '#2b2d31';
+            ctx.fillRect(imgX, textYStart, contentWidth, boxHeight);
+            ctx.strokeStyle = '#00FA9A';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(imgX, textYStart, contentWidth, boxHeight);
+
+            // ネタの名前と値段
+            ctx.textAlign = 'left';
+            ctx.font = 'bold 28px NotoSansJP';
+            ctx.fillStyle = '#FFD700';
+            ctx.fillText(safeName, imgX + 20, textYStart + 40);
+
+            ctx.textAlign = 'right';
             ctx.font = 'bold 24px NotoSansJP';
-            ctx.fillStyle = '#fefae0';
-            ctx.fillText('下のリストから注文してちゅ！🐭', canvasWidth / 2, imgY + drawHeight + 50);
+            ctx.fillStyle = '#ff6b6b';
+            ctx.fillText(`${selectedSushi.price}円`, imgX + contentWidth - 20, textYStart + 40);
+
+            // ネタの説明
+            ctx.textAlign = 'left';
+            ctx.font = '22px NotoSansJP';
+            ctx.fillStyle = '#e0e0e0';
+            drawCanvasText(ctx, safeDesc, imgX + 20, textYStart + 80, contentWidth - 40, 32);
 
             // PNGに変換して送信！
             const pngBuffer = await canvas.encode('png');
-            const attachment = new AttachmentBuilder(pngBuffer, { name: 'daisho_canvas.png' });
+            const attachment = new AttachmentBuilder(pngBuffer, { name: 'sushi_canvas.png' });
 
-            await interaction.editReply({ 
-                content: 'いらっしゃい！何握るちゅ？🍣', 
+            await interaction.followUp({ 
+                content: `✨ 握りたての **${safeName}** だちゅ！`, 
                 embeds: [], 
-                files: [attachment], 
-                components: [row] 
+                files: [attachment]
             });
 
         } catch (error) {
-            console.error('Canvas寿司オーダーエラー:', error);
-            await interaction.editReply({ content: 'のれんを出すのに失敗したちゅ…ログを確認してちゅ💦' });
+            console.error('Canvas寿司提供エラー:', error);
+            await interaction.followUp({ content: 'お寿司を落としちゃったちゅ…' });
         }
-        }
+    }
 
         // 💰 おあいそクイズ (btn_sushi_oaiso)
         else if (interaction.customId === 'btn_sushi_oaiso') {
@@ -3442,27 +3465,6 @@ client.on('interactionCreate', async (interaction) => {
         } catch (error) {
             console.error('Canvas寿司提供エラー:', error);
             await interaction.followUp({ content: 'お寿司を落としちゃったちゅ…', ephemeral: isHidden });
-        }
-    }
-    else if (interaction.isStringSelectMenu() && interaction.customId === 'sushi_select_order') {
-        await interaction.deferUpdate(); 
-
-        const selectedIndex = parseInt(interaction.values[0], 10);
-        const selectedSushi = sushiMenu[selectedIndex];
-
-        const sushiAttachment = await compressAndGetAttachment(selectedSushi.image, 500, 's'); 
-
-        const embed = new EmbedBuilder()
-            .setColor(0x00FF00)
-            .setTitle(`✨ はい、${selectedSushi.name} お待ちだちゅ！`)
-            .setDescription(`${selectedSushi.description}\nお値段は **${selectedSushi.price}円** だちゅ！🐭💨`)
-            .setFooter({ text: 'へいおまちちゅ！' });
-
-        if (sushiAttachment) {
-            embed.setImage(`attachment://${sushiAttachment.name}`);
-            await interaction.followUp({ embeds: [embed], files: [sushiAttachment], ephemeral: isHidden });
-        } else {
-            await interaction.followUp({ content: `ごめんちゅ… ${selectedSushi.name} の画像が見つからなかったちゅ…。`, ephemeral: isHidden });
         }
     }
     // 💡 【超・軽量爆速版】注文追加時の処理 (注文した寿司の画像！)

@@ -1417,36 +1417,98 @@ client.on('interactionCreate', async (interaction) => {
             await interaction.editReply({ content: 'お天気を調べてる途中で、風に飛ばされちゃったちゅ…。' });
         }
     }
+    // 💡 【超・軽量爆速版】動物画像表示コマンド (Canvasを使った写真カード風生成)
     if (['mouse', 'rat', 'nezumi'].includes(interaction.commandName)) {
         await interaction.deferReply({ ephemeral: isHidden });
+        
         let selectedList = [];
         let titleMsg = "";
+        let themeColor = ""; // 💡 枠線や文字の色をコマンドごとに変えるちゅ！
 
+        // 💡 絵文字(🐭や🐀)はCanvasの文字化けを防ぐためにタイトルから抜いておくちゅ
         if (interaction.commandName === 'mouse') {
             selectedList = extraImages.mouse;
-            titleMsg = '🐭 可愛いねずみが見つかったよ！';
+            titleMsg = '可愛いねずみが見つかったよ！';
+            themeColor = '#FFB6C1'; // ピンク系
         } else if (interaction.commandName === 'rat') {
             selectedList = extraImages.rat;
-            titleMsg = '🐀 かっこいいラットが登場だちゅ！';
+            titleMsg = 'かっこいいラットが登場だちゅ！';
+            themeColor = '#87CEFA'; // ブルー系
         } else if (interaction.commandName === 'nezumi') {
             selectedList = extraImages.not_mouse;
-            titleMsg = '🤔 これ……ねずみなのかなぁ……？';
+            titleMsg = 'これ……ねずみなのかなぁ……？';
+            themeColor = '#FFD700'; // ゴールド系
         }
 
         const chosen = selectedList[Math.floor(Math.random() * selectedList.length)];
-        const attachment = await getJokeImage(chosen.file);
-        
-        if (attachment) {
-            const embed = new EmbedBuilder()
-                .setColor(0x00AE86)
-                .setTitle(titleMsg)
-                .setDescription(`この子の名前は **${chosen.name}** だちゅ！`)
-                .setImage(`attachment://${attachment.name}`); 
-            await interaction.editReply({ embeds: [embed], files: [attachment] });
-        } else {
-            await interaction.editReply({ content: 'ごめんね、その子は今お散歩中みたいだちゅ……。' });
+        const imagePath = path.resolve(__dirname, 'images', chosen.file);
+
+        if (!fs.existsSync(imagePath)) {
+            return interaction.editReply({ content: 'ごめんね、その子は今お散歩中みたいだちゅ……。' });
+        }
+
+        try {
+            // 💡 1. 画像を読み込んでアスペクト比を計算！
+            const img = await loadImage(imagePath);
+            const canvasWidth = 600;
+            const contentWidth = 500; // 画像の表示幅
+            
+            // アスペクト比を維持した高さを計算するちゅ
+            const aspectRatio = img.width / img.height;
+            const drawHeight = contentWidth / Math.max(0.1, aspectRatio);
+            
+            // 全体のキャンバス高さを決定 (上の余白 + 画像の高さ + 下の余白)
+            const headerHeight = 100;
+            const footerHeight = 80;
+            const canvasHeight = headerHeight + drawHeight + footerHeight;
+
+            // 💡 2. ピッタリサイズのキャンバスを作って描画スタート！
+            const canvas = createCanvas(canvasWidth, canvasHeight);
+            const ctx = canvas.getContext('2d');
+
+            // 背景と枠線
+            ctx.fillStyle = '#1e1e24';
+            ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+            ctx.strokeStyle = themeColor;
+            ctx.lineWidth = 10;
+            ctx.strokeRect(0, 0, canvasWidth, canvasHeight);
+
+            // タイトル
+            ctx.textAlign = 'center';
+            ctx.font = 'bold 32px NotoSansJP';
+            ctx.fillStyle = themeColor;
+            ctx.fillText(titleMsg, canvasWidth / 2, 60);
+
+            // 💡 写真の描画
+            const imgX = (canvasWidth - contentWidth) / 2;
+            const imgY = headerHeight;
+            
+            // 画像を描画
+            ctx.drawImage(img, imgX, imgY, contentWidth, drawHeight);
+            
+            // 写真の周りに白い枠線をつけて、ポラロイドっぽくするちゅ！
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(imgX, imgY, contentWidth, drawHeight);
+
+            // 下部に名前を描画
+            ctx.font = 'bold 26px NotoSansJP';
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(`この子の名前は ${chosen.name} だちゅ！`, canvasWidth / 2, imgY + drawHeight + 50);
+
+            // 💡 PNG画像に変換して送信！
+            const pngBuffer = await canvas.encode('png');
+            const attachment = new AttachmentBuilder(pngBuffer, { name: 'animal_canvas.png' });
+
+            // Discordのテキスト部分には絵文字をつけて送るちゅ！🐾
+            await interaction.editReply({ content: 'お友達を連れてきたちゅ！🐾✨', embeds: [], files: [attachment] });
+
+        } catch (error) {
+            console.error('Canvas動物画像エラー:', error);
+            await interaction.editReply({ content: '写真の現像に失敗しちゃったちゅ…。' });
         }
     }
+    
 
     else if (interaction.commandName === 'quiz') {
         await interaction.deferReply({ ephemeral: isHidden });

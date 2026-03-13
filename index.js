@@ -1624,8 +1624,8 @@ client.on('interactionCreate', async (interaction) => {
         // ここに引っかかったら、まずはローディング状態にするちゅ
         if (interaction.isButton() || interaction.isModalSubmit() || interaction.isStringSelectMenu() || interaction.isUserSelectMenu()) {
             
-            // 例外処理：おあいそゲームの中のボタン・メニューは deferUpdate 済みなのでスキップ
-            if (interaction.customId !== 'sushi_select_order' && interaction.customId !== 'oaiso_add_item' && interaction.customId !== 'oaiso_bill_please' && !interaction.customId.startsWith('btn_atk') && !interaction.customId.startsWith('btn_def') && !interaction.customId.startsWith('btn_sp') && !interaction.customId.startsWith('btn_special') && interaction.customId !== 'catch_attempt' && interaction.customId !== 'catch_ignore' && interaction.customId !== 'kibun_select_channel') {
+            // 💡 修正：クイズの解答ボタン（correct_nezumi, incorrect_nezumi）も例外リストに追加したちゅ！
+            if (interaction.customId !== 'sushi_select_order' && interaction.customId !== 'oaiso_add_item' && interaction.customId !== 'oaiso_bill_please' && !interaction.customId.startsWith('btn_atk') && !interaction.customId.startsWith('btn_def') && !interaction.customId.startsWith('btn_sp') && !interaction.customId.startsWith('btn_special') && interaction.customId !== 'catch_attempt' && interaction.customId !== 'catch_ignore' && interaction.customId !== 'kibun_select_channel' && interaction.customId !== 'correct_nezumi' && interaction.customId !== 'incorrect_nezumi') {
                 try { 
                     if (interaction.isModalSubmit()) {
                         // 💡 モーダル送信後も、非表示/表示の設定を引き継いで結果を出すちゅ！

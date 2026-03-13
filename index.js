@@ -1374,18 +1374,18 @@ client.once('clientReady', async (c) => {
     console.log(`${c.user.tag} (ねずみタロット) がログインしました！🔮`);
 
     // 💡 統合コマンドと、裏機能(気分記録)だけにするちゅ！
+    // 💡 統合コマンドと、裏機能(気分記録)だけにするちゅ！
     const data = [
         { 
             name: 'nezumi', 
-            description: 'ねずみの機能（占い・ゲーム・相棒など）を使う総合メニューを開くちゅ！' 
-        },
-        // 💡 kibun 関連の3つのコマンドはそのまま残すちゅ！
-        {
-            name: 'kibun',
-            description: '今の気分を記録するちゅ！週の終わりに天気図を送るちゅよ☁️',
-            options: [ /* ...ここは元のままでOKだちゅ... */
-                { name: 'level', type: 4, description: '今の気分を5段階で教えてちゅ！', required: true, choices: [ { name: '5: 絶好調！✨', value: 5 }, { name: '4: いい感じ☀️', value: 4 }, { name: '3: ふつう☁️', value: 3 }, { name: '2: ちょっとどんより🌧️', value: 2 }, { name: '1: しんどい…⚡', value: 1 } ] },
-                { name: 'memo', type: 3, description: '何か一言メモがあれば書いてちゅ（任意）', required: false }
+            description: 'ねずみの機能（占い・ゲーム・相棒など）を使う総合メニューを開くちゅ！',
+            options: [
+                {
+                    name: 'hidden',
+                    type: 5, // 5 は BOOLEAN (True/False) の意味だちゅ！
+                    description: '結果を自分だけに見えるようにするかどうか選べるちゅ！(デフォルトはみんなに見えるちゅ)',
+                    required: false
+                }
             ]
         },
         { name: 'kibun_setchannel', description: '心の天気図（週次レポート）を送信するチャンネルを、自分用に指定するちゅ！☁️' },
@@ -1472,10 +1472,23 @@ client.on('interactionCreate', async (interaction) => {
     const isHidden = false;
     const flags = undefined;
 
+    //*******************************************************************************************メイン関数***************************************************************************************** */
+client.on('interactionCreate', async (interaction) => {
+    // 💡 Modal(ポップアップ)やUserSelectMenuの判定も追加するちゅ！
+    if (!interaction.isChatInputCommand() && !interaction.isStringSelectMenu() && !interaction.isButton() && !interaction.isModalSubmit() && !interaction.isUserSelectMenu()) return;
+
+    // 💡 元のメッセージが「自分だけに見える（Ephemeral）」設定かどうかを引き継ぐちゅ！
+    const isMessageHidden = interaction.message?.flags?.has(MessageFlags.Ephemeral) || false;
+    let currentFlags = isMessageHidden ? MessageFlags.Ephemeral : undefined;
+
     // ==========================================================
     // 🚪 1. 入り口： /nezumi コマンド
     // ==========================================================
     if (interaction.isChatInputCommand() && interaction.commandName === 'nezumi') {
+        // 💡 コマンドを打つ時にユーザーが選んだ設定を受け取るちゅ！
+        const userWantsHidden = interaction.options.getBoolean('hidden') || false;
+        currentFlags = userWantsHidden ? MessageFlags.Ephemeral : undefined;
+
         const row = new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder()
                 .setCustomId('nezumi_main_menu')
@@ -1488,7 +1501,8 @@ client.on('interactionCreate', async (interaction) => {
                     { label: '⚔️ 目指せ！ネズミマスター', description: '相棒のゲット、特訓、バトルなど', value: 'cat_pet' }
                 ])
         );
-        await interaction.reply({ content: 'いらっしゃいちゅ！メニューを選んでね！🐭', components: [row], flags });
+        // 💡 ここで currentFlags を渡して、表示/非表示を決定するちゅ！
+        await interaction.reply({ content: 'いらっしゃいちゅ！メニューを選んでね！🐭', components: [row], flags: currentFlags });
     }
 
     // ==========================================================
@@ -1621,9 +1635,9 @@ client.on('interactionCreate', async (interaction) => {
             // 例外処理：おあいそゲームの中のボタン・メニューは deferUpdate 済みなのでスキップ
             if (interaction.customId !== 'sushi_select_order' && interaction.customId !== 'oaiso_add_item' && interaction.customId !== 'oaiso_bill_please' && !interaction.customId.startsWith('btn_atk') && !interaction.customId.startsWith('btn_def') && !interaction.customId.startsWith('btn_sp') && !interaction.customId.startsWith('btn_special') && interaction.customId !== 'catch_attempt' && interaction.customId !== 'catch_ignore' && interaction.customId !== 'kibun_select_channel') {
                 try { 
-                    // 💡 【超重要】フォーム(モーダル)送信の時は、新しいメッセージを作る「deferReply」を使うちゅ！
                     if (interaction.isModalSubmit()) {
-                        await interaction.deferReply();
+                        // 💡 モーダル送信後も、非表示/表示の設定を引き継いで結果を出すちゅ！
+                        await interaction.deferReply({ flags: currentFlags });
                     } else {
                         await interaction.deferUpdate(); 
                         await interaction.editReply({ components: [] });

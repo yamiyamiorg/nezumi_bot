@@ -1621,10 +1621,21 @@ client.on('interactionCreate', async (interaction) => {
     // ==========================================================
     // (これ以降の処理は、元の処理と同じように deferUpdate() してから editReply() して画像を上書きするちゅ！)
     else {
+        // 💡 【超重要】他人がボタンやメニューを横取りするのを防ぐ魔法だちゅ！
+        if ((interaction.isButton() || interaction.isStringSelectMenu() || interaction.isUserSelectMenu()) && interaction.message && interaction.message.interaction) {
+            // 最初にコマンドを打った本人じゃなかったら、こっそり弾くちゅ！
+            if (interaction.user.id !== interaction.message.interaction.user.id) {
+                return interaction.reply({ 
+                    content: 'これは他の人のメニューだちゅ！自分で `/nezumi` を打って遊んでちゅ！🐭', 
+                    flags: MessageFlags.Ephemeral 
+                }).catch(e => console.error('横取り防止メッセージの送信エラー:', e));
+            }
+        }
+
         // ここに引っかかったら、まずはローディング状態にするちゅ
         if (interaction.isButton() || interaction.isModalSubmit() || interaction.isStringSelectMenu() || interaction.isUserSelectMenu()) {
             
-            // 💡 修正：クイズの解答ボタン（correct_nezumi, incorrect_nezumi）も例外リストに追加したちゅ！
+            // 例外処理：おあいそゲームの中のボタン・メニューは deferUpdate 済みなのでスキップ
             if (interaction.customId !== 'sushi_select_order' && interaction.customId !== 'oaiso_add_item' && interaction.customId !== 'oaiso_bill_please' && !interaction.customId.startsWith('btn_atk') && !interaction.customId.startsWith('btn_def') && !interaction.customId.startsWith('btn_sp') && !interaction.customId.startsWith('btn_special') && interaction.customId !== 'catch_attempt' && interaction.customId !== 'catch_ignore' && interaction.customId !== 'kibun_select_channel' && interaction.customId !== 'correct_nezumi' && interaction.customId !== 'incorrect_nezumi') {
                 try { 
                     if (interaction.isModalSubmit()) {

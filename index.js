@@ -4032,12 +4032,29 @@ const generateStickyImage = async (text) => {
         </div>`;
     }
 
+    // 💡 日本語フォントを読み込むちゅ
     const fontBuffer = fs.readFileSync(path.join(__dirname, 'fonts', 'LINESeedJP-Regular.ttf'));
+    // 💡 【追加】絵文字用のフォントも読み込むちゅ！
+    const emojiFontBuffer = fs.readFileSync(path.join(__dirname, 'fonts', 'NotoColorEmoji.ttf'));
 
     const svg = await satori(html(finalMarkupStr), {
         width: 600,
         height: 150,
-        fonts: [{ name: 'NotoSansJP', data: fontBuffer, weight: 400, style: 'normal' }]
+        // 💡 【変更】フォントのリストに絵文字フォントを追加するちゅ！
+        fonts: [
+            { 
+                name: 'NotoSansJP', 
+                data: fontBuffer, 
+                weight: 400, 
+                style: 'normal' 
+            },
+            { 
+                name: 'Noto Color Emoji', 
+                data: emojiFontBuffer, 
+                weight: 400, 
+                style: 'normal' 
+            }
+        ]
     });
 
     const resvg = new Resvg(svg, { background: 'transparent', fitTo: { mode: 'original' } });

@@ -3817,5 +3817,85 @@ client.on('interactionCreate', async (interaction) => {
     }
     }
 });
+// ==========================================================
+// 📌 チャンネル最下段固定画像（Sticky Message）の魔法
+// ==========================================================
+
+// 💡 1. 固定表示したいチャンネルのIDをここに入れるちゅ！（複数ある場合は配列にしてもOKだちゅ）
+const STICKY_CHANNEL_ID = '1479824114293145621';
+
+// 💡 チャンネルごとに最後に送信した画像のメッセージIDを記憶する箱
+const stickyMessageIds = new Map();
+
+// 💡 Satoriを使った看板画像の生成関数
+const generateStickyImage = async (text) => {
+    // satori-htmlを使って、HTMLとCSSでデザインを作るちゅ！
+    // ※Satoriはflexboxベースで動くから、display: flex; を多用するちゅ。
+    const markup = html`<div style="display: flex; flex-direction: column; background-color: #2b2d31; color: white; width: 600px; height: 150px; align-items: center; justify-content: center; border: 4px solid #FFD700; border-radius: 15px; box-shadow: 0 8px 16px rgba(0,0,0,0.5);">
+        <div style="display: flex; font-size: 32px; font-weight: bold; margin-bottom: 10px; color: #FFD700;">
+            🐭 ねずみの案内板 🧀
+        </div>
+        <div style="display: flex; font-size: 24px; color: #e0e0e0;">
+            ${text}
+        </div>
+    </div>`;
+
+    // 💡 フォントを読み込むちゅ（SatoriはBufferデータが必要だちゅ）
+    const fontBuffer = fs.readFileSync(path.join(__dirname, 'fonts', 'LINESeedJP-Regular.ttf'));
+
+    const svg = await satori(markup, {
+        width: 600,
+        height: 150,
+        fonts: [
+            {
+                name: 'NotoSansJP',
+                data: fontBuffer,
+                weight: 400,
+                style: 'normal',
+            }
+        ]
+    });
+
+    // 💡 SVGをPNG画像に変換するちゅ！
+    const resvg = new Resvg(svg, {
+        background: 'transparent',
+        fitTo: { mode: 'original' },
+    });
+    return resvg.render().asPng();
+};
+
+// 💡 誰かがメッセージを書き込んだ時の処理（messageCreateイベント）
+client.on('messageCreate', async (message) => {
+    // ねずみ自身や他のBotの書き込みには反応しないようにするちゅ！無限ループ防止だちゅ！
+    if (message.author.bot) return;
+
+    // 指定したチャンネルでのみ動くようにするちゅ
+    if (message.channelId === STICKY_CHANNEL_ID) {
+        
+        // ① 前にねずみが置いた画像があれば消すちゅ！
+        const lastId = stickyMessageIds.get(message.channelId);
+        if (lastId) {
+            try {
+                const lastMsg = await message.channel.messages.fetch(lastId);
+                if (lastMsg) await lastMsg.delete();
+            } catch (e) {
+                // 古いメッセージが既に消されていた場合は気にせず次へ進むちゅ
+            }
+        }
+
+        // ② Satoriで新しい画像を作って、一番下に送信するちゅ！
+        try {
+            const pngBuffer = await generateStickyImage('いつでも最新の情報をここでお知らせするちゅ！');
+            const attachment = new AttachmentBuilder(pngBuffer, { name: 'sticky_banner.png' });
+
+            const sentMsg = await message.channel.send({ files: [attachment] });
+
+            // ③ 新しく置いた画像のメッセージIDを記憶しておくちゅ！
+            stickyMessageIds.set(message.channelId, sentMsg.id);
+        } catch (e) {
+            console.error('最下段画像の設置エラーだちゅ:', e);
+        }
+    }
+});
 
 client.login(process.env.DISCORD_TOKEN);

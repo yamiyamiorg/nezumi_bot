@@ -3980,11 +3980,11 @@ client.on('interactionCreate', async (interaction) => {
 // 💡 1. 固定表示したいチャンネルのIDをここに入れるちゅ！
 const STICKY_CHANNEL_ID = '1479824114293145621';
 
-// 💡 【進化】再起動しても忘れないようにメモ帳(JSON)を用意するちゅ！
+// 💡 再起動しても忘れないようにメモ帳(JSON)を用意するちゅ！
 const stickyDataPath = path.join(__dirname, 'sticky.json');
 const stickyMessageIds = new Map();
 
-// 起動時にメモ帳を読み込む
+// 💡 起動時にメモ帳を読み込んで、「前の看板の場所」を思い出すだけにするちゅ！（ここではまだ消さないちゅ！）
 if (fs.existsSync(stickyDataPath)) {
     try {
         const data = JSON.parse(fs.readFileSync(stickyDataPath, 'utf8'));
@@ -3999,27 +3999,6 @@ const saveStickyData = () => {
     const obj = Object.fromEntries(stickyMessageIds);
     fs.writeFileSync(stickyDataPath, JSON.stringify(obj, null, 2));
 };
-
-// 💡 【新規】ボットが目を覚ました時（再起動時）に、古い看板をお掃除する魔法！
-client.once('ready', async () => {
-    for (const [channelId, messageId] of stickyMessageIds.entries()) {
-        try {
-            const channel = await client.channels.fetch(channelId);
-            if (channel) {
-                const oldMsg = await channel.messages.fetch(messageId);
-                if (oldMsg) {
-                    await oldMsg.delete();
-                    console.log(`🧹 再起動お掃除: ${channelId} の古い看板を削除したちゅ！`);
-                }
-            }
-        } catch (e) {
-            // すでに誰かが手で消していた場合は気にしないちゅ！
-        }
-    }
-    // お掃除が終わったらリストを空にして、メモ帳も綺麗にするちゅ！
-    stickyMessageIds.clear();
-    saveStickyData();
-});
 
 // 💡 Satoriを使った看板画像の生成関数（日替わり対応版）
 const generateStickyImage = async (text) => {
@@ -4071,7 +4050,7 @@ client.on('messageCreate', async (message) => {
 
     if (message.channelId === STICKY_CHANNEL_ID) {
         
-        // ① 前にねずみが置いた画像があれば消すちゅ！
+        // ① 前にねずみが置いた画像があれば（再起動前の記憶も含めて）ここで消すちゅ！
         const lastId = stickyMessageIds.get(message.channelId);
         if (lastId) {
             try {
@@ -4086,14 +4065,13 @@ client.on('messageCreate', async (message) => {
             const attachment = new AttachmentBuilder(pngBuffer, { name: 'sticky_banner.png' });
             const sentMsg = await message.channel.send({ files: [attachment] });
 
-            // ③ 【進化】新しく置いた画像のIDを記憶して、メモ帳に保存するちゅ！
+            // ③ 新しく置いた画像のIDを記憶して、メモ帳に保存するちゅ！
             stickyMessageIds.set(message.channelId, sentMsg.id);
             saveStickyData();
         } catch (e) {
             console.error('最下段画像の設置エラーだちゅ:', e);
         }
     }
-
 });
 
 client.login(process.env.DISCORD_TOKEN);

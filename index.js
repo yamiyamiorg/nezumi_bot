@@ -4098,5 +4098,42 @@ client.on('messageCreate', async (message) => {
         }
     }
 });
+// ==========================================================
+// 🕛 【追加】毎日深夜0時に自動で看板を掛け替える魔法！
+// ==========================================================
+cron.schedule('0 0 * * *', async () => {
+    console.log('📅 日付が変わったちゅ！看板を新しいものに掛け替えるちゅ！');
+    
+    try {
+        // 💡 1. チャンネルを見つけてくるちゅ！
+        const channel = await client.channels.fetch(STICKY_CHANNEL_ID);
+        if (!channel) return;
 
+        // 💡 2. 昨日まで置いてあった古い看板を消すちゅ！
+        const lastId = stickyMessageIds.get(STICKY_CHANNEL_ID);
+        if (lastId) {
+            try {
+                const lastMsg = await channel.messages.fetch(lastId);
+                if (lastMsg) await lastMsg.delete();
+            } catch (e) {
+                // 誰かが既に消していた場合は気にしないちゅ
+            }
+        }
+
+        // 💡 3. 新しい「今日の日付」の画像を作って、送信するちゅ！
+        const pngBuffer = await generateStickyImage('いつでも最新の情報をここでお知らせするちゅ！');
+        const attachment = new AttachmentBuilder(pngBuffer, { name: 'sticky_banner.png' });
+        const sentMsg = await channel.send({ files: [attachment] });
+
+        // 💡 4. 新しい画像のIDを記憶してメモ帳に保存するちゅ！
+        stickyMessageIds.set(STICKY_CHANNEL_ID, sentMsg.id);
+        saveStickyData();
+        
+        console.log('✨ 日替わり看板の自動掛け替えが完了したちゅ！');
+    } catch (e) {
+        console.error('深夜の看板掛け替えエラーだちゅ:', e);
+    }
+}, {
+    timezone: "Asia/Tokyo" // 日本時間の深夜0時に合わせるちゅ！
+});
 client.login(process.env.DISCORD_TOKEN);

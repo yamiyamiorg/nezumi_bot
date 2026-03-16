@@ -1449,6 +1449,32 @@ client.once('clientReady', async (c) => {
                     required: true
                 }
             ]
+        },
+        // 💡 【追加】モーダルで看板を設定するコマンドだちゅ！
+       // 💡 【追加】モーダルで看板を設定するコマンドだちゅ！
+        {
+            name: 'event_setup',
+            description: '【管理者用】画面(モーダル)から文字を入力して、日替わり看板を設定するちゅ！',
+            options: [
+                {
+                    name: 'date',
+                    type: 3, // STRING (文字列)
+                    description: '設定したい日付（例: 03-17）',
+                    required: true
+                },
+                // 💡 【追加】使いたいデザインを選べるようにするちゅ！
+                {
+                    name: 'template',
+                    type: 3, // STRING (文字列)
+                    description: '使いたいデザインテンプレートを選ぶちゅ！',
+                    required: true,
+                    choices: [
+                        { name: '🟢 チケット風 (グリーン)', value: 'ticket_green' },
+                        { name: '🟡 エレガント (ブラック＆ゴールド)', value: 'elegant_gold' },
+                        { name: '🌸 ポップ (パステルピンク)', value: 'pop_pink' }
+                    ]
+                }
+            ]
         }
     ]; // ⬅️ ここがコマンドリストの終わり
 
@@ -4004,6 +4030,67 @@ client.on('interactionCreate', async (interaction) => {
             await interaction.editReply('画像の生成に失敗しちゃったちゅ…。HTMLやCSSに間違いがないか確認してちゅ！');
         }
     }
+    // 💡 /event_setup コマンド (モーダル入力画面を呼び出す)
+    // 💡 /event_setup コマンド (モーダル入力画面を呼び出す)
+    else if (interaction.commandName === 'event_setup') {
+        const dateStr = interaction.options.getString('date');
+        const templateType = interaction.options.getString('template'); // 💡 テンプレートの種類を受け取る！
+        const { ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+        
+        // 💡 customIdに「日付」と「選んだテンプレート」を両方覚えさせるちゅ！
+        const modal = new ModalBuilder()
+            .setCustomId(`modal_event_${dateStr}_${templateType}`)
+            .setTitle(`${dateStr} の看板設定`);
+
+        // ... (この下の TextInputBuilder 等の処理は今までと同じでOKだちゅ！)
+
+        // 入力欄を5つ（Discordの最大数）用意するちゅ！
+        const titleInput = new TextInputBuilder().setCustomId('title').setLabel('タイトル').setPlaceholder('例: ☘️ St. Patrick\'s Day').setStyle(TextInputStyle.Short).setRequired(true);
+        const subInput = new TextInputBuilder().setCustomId('subtitle').setLabel('サブタイトル').setPlaceholder('例: 緑を身にまとって集まろう！').setStyle(TextInputStyle.Short).setRequired(false);
+        const info1Input = new TextInputBuilder().setCustomId('info1').setLabel('情報1 (日時など)').setPlaceholder('例: 📅 3月17日(火) 18:00〜').setStyle(TextInputStyle.Short).setRequired(false);
+        const info2Input = new TextInputBuilder().setCustomId('info2').setLabel('情報2 (場所など)').setPlaceholder('例: 📍 グリーン・クローバー').setStyle(TextInputStyle.Short).setRequired(false);
+        const info3Input = new TextInputBuilder().setCustomId('info3').setLabel('情報3 (内容など)').setPlaceholder('例: 🍺 ギネスビール飲み放題！').setStyle(TextInputStyle.Short).setRequired(false);
+
+        // モーダルに入力欄をセット！
+        modal.addComponents(
+            new ActionRowBuilder().addComponents(titleInput),
+            new ActionRowBuilder().addComponents(subInput),
+            new ActionRowBuilder().addComponents(info1Input),
+            new ActionRowBuilder().addComponents(info2Input),
+            new ActionRowBuilder().addComponents(info3Input)
+        );
+
+        // 画面に表示するちゅ！
+        await interaction.showModal(modal);
+    }
+    // 💡 モーダルから入力された情報を受け取って保存する処理
+    // 💡 モーダルから入力された情報を受け取って保存する処理
+    else if (interaction.isModalSubmit() && interaction.customId.startsWith('modal_event_')) {
+        await interaction.deferReply({ ephemeral: true }); 
+        
+        // 💡 "modal_event_03-17_pop_pink" のようなIDから、日付とテンプレート名を切り離して取り出すちゅ！
+        const parts = interaction.customId.split('_');
+        const dateStr = parts[2]; // "03-17"
+        const templateType = parts.slice(3).join('_'); // "pop_pink" などの名前
+        
+        const title = interaction.fields.getTextInputValue('title');
+        const subtitle = interaction.fields.getTextInputValue('subtitle') || '';
+        const info1 = interaction.fields.getTextInputValue('info1') || '';
+        const info2 = interaction.fields.getTextInputValue('info2') || '';
+        const info3 = interaction.fields.getTextInputValue('info3') || '';
+
+        const dataPath = path.join(__dirname, 'designs', 'events_data.json');
+        let eventsData = {};
+        if (fs.existsSync(dataPath)) {
+            eventsData = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
+        }
+        
+        // 💡 templateType も一緒に保存するちゅ！
+        eventsData[dateStr] = { title, subtitle, info1, info2, info3, template: templateType };
+        fs.writeFileSync(dataPath, JSON.stringify(eventsData, null, 2));
+
+        await interaction.editReply(`📅 **${dateStr}** の看板データを登録したちゅ！📝✨\n\`/design_test date:${dateStr}\` でプレビューを見てみてちゅ！`);
+    }
     }
 });
 // ==========================================================
@@ -4037,39 +4124,99 @@ const saveStickyData = () => {
 // 💡 Satoriを使った看板画像の生成関数（フルカラー絵文字対応版！）
 // 💡 Satoriを使った看板画像の生成関数（フルカラー絵文字「確実」表示版！）
 // 💡 2つ目の引数に forcedDateStr を追加するちゅ！
+// 💡 Satoriを使った看板画像の生成関数（モーダル入力対応版！）
+// 💡 Satoriを使った看板画像の生成関数（モーダル入力対応＆フルカラー絵文字版！）
 const generateStickyImage = async (text, forcedDateStr = null) => {
     const d = new Date();
     const jstD = new Date(d.getTime() + (9 * 60 * 60 * 1000));
     const month = String(jstD.getUTCMonth() + 1).padStart(2, '0');
     const day = String(jstD.getUTCDate()).padStart(2, '0');
-    
-    // 💡 指定があればそれを使う、無ければ今日の日付にするちゅ！
     const todayStr = forcedDateStr || `${month}-${day}`; 
-
-    const htmlPath = path.join(__dirname, 'designs', `${todayStr}.html`);
-    const cssPath = path.join(__dirname, 'designs', `${todayStr}.css`);
-
-    // ... (この下の let finalMarkupStr = ''; から先は今まで通りでOKだちゅ！)
 
     let finalMarkupStr = '';
 
-    if (fs.existsSync(htmlPath)) {
-        let customHtml = fs.readFileSync(htmlPath, 'utf8');
-        let customCss = '';
-        if (fs.existsSync(cssPath)) {
-            customCss = fs.readFileSync(cssPath, 'utf8');
+    // 💡 1. まずはモーダルで登録したデータ（events_data.json）があるか探すちゅ！
+    const dataPath = path.join(__dirname, 'designs', 'events_data.json');
+    let boardData = null;
+    if (fs.existsSync(dataPath)) {
+        const eventsData = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
+        if (eventsData[todayStr]) {
+            boardData = eventsData[todayStr];
         }
-        customHtml = customHtml.replace('{{text}}', text);
-        finalMarkupStr = customCss ? `<style>${customCss}</style>${customHtml}` : customHtml;
-    } else {
-        finalMarkupStr = `<div style="display: flex; flex-direction: column; background-color: #2b2d31; color: white; width: 600px; height: 150px; align-items: center; justify-content: center; border: 4px solid #FFD700; border-radius: 15px; box-shadow: 0 8px 16px rgba(0,0,0,0.5);">
-            <div style="display: flex; font-size: 32px; font-weight: bold; margin-bottom: 10px; color: #FFD700;">
-                🐭 ねずみの案内板 🧀
-            </div>
-            <div style="display: flex; font-size: 24px; color: #e0e0e0;">
-                ${text}
-            </div>
-        </div>`;
+    }
+
+    if (boardData) {
+        // 💡 保存されたテンプレート名を確認するちゅ（無ければグリーンにする）
+        const tType = boardData.template || 'ticket_green';
+
+        if (tType === 'elegant_gold') {
+            // 🟡 エレガント（ブラック＆ゴールド）
+            finalMarkupStr = `
+            <div style="display: flex; flex-direction: row; width: 600px; height: 150px; background-color: #1a1a1a; border: 4px solid #FFD700; border-radius: 10px; overflow: hidden; color: white;">
+                <div style="display: flex; flex-direction: column; justify-content: center; width: 350px; padding: 20px; border-right: 2px solid #FFD700;">
+                    <div style="display: flex; font-size: 28px; font-weight: bold; color: #FFD700; margin-bottom: 5px;">${boardData.title}</div>
+                    <div style="display: flex; font-size: 16px; color: #e0e0e0; margin-bottom: 12px;">${boardData.subtitle}</div>
+                    <div style="display: flex; font-size: 16px; font-weight: bold; color: #ffffff;">${text}</div>
+                </div>
+                <div style="display: flex; flex-direction: column; justify-content: center; width: 250px; padding: 15px; background-color: #2b2b2b;">
+                    ${boardData.info1 ? `<div style="display: flex; align-items: center; font-size: 15px; color: #FFD700; margin-bottom: 8px;">${boardData.info1}</div>` : ''}
+                    ${boardData.info2 ? `<div style="display: flex; align-items: center; font-size: 15px; color: #FFD700; margin-bottom: 8px;">${boardData.info2}</div>` : ''}
+                    ${boardData.info3 ? `<div style="display: flex; align-items: center; font-size: 15px; color: #FFD700; margin-bottom: 8px;">${boardData.info3}</div>` : ''}
+                </div>
+            </div>`;
+        } else if (tType === 'pop_pink') {
+            // 🌸 ポップ（パステルピンク）
+            finalMarkupStr = `
+            <div style="display: flex; flex-direction: row; width: 600px; height: 150px; background-color: #fff0f5; border: 6px dotted #ffb6c1; border-radius: 30px; overflow: hidden;">
+                <div style="display: flex; flex-direction: column; justify-content: center; width: 330px; padding: 20px; background-color: #ffe4e1; border-right: 4px dashed #ff69b4;">
+                    <div style="display: flex; font-size: 26px; font-weight: bold; color: #ff1493; margin-bottom: 5px;">${boardData.title}</div>
+                    <div style="display: flex; font-size: 16px; color: #ff69b4; margin-bottom: 12px;">${boardData.subtitle}</div>
+                    <div style="display: flex; font-size: 16px; font-weight: bold; color: #c71585;">${text}</div>
+                </div>
+                <div style="display: flex; flex-direction: column; justify-content: center; width: 270px; padding: 15px;">
+                    ${boardData.info1 ? `<div style="display: flex; align-items: center; font-size: 15px; color: #db7093; margin-bottom: 8px;">${boardData.info1}</div>` : ''}
+                    ${boardData.info2 ? `<div style="display: flex; align-items: center; font-size: 15px; color: #db7093; margin-bottom: 8px;">${boardData.info2}</div>` : ''}
+                    ${boardData.info3 ? `<div style="display: flex; align-items: center; font-size: 15px; color: #db7093; margin-bottom: 8px;">${boardData.info3}</div>` : ''}
+                </div>
+            </div>`;
+        } else {
+            // 🟢 チケット風（グリーン）※デフォルト
+            finalMarkupStr = `
+            <div style="display: flex; flex-direction: row; width: 600px; height: 150px; background-color: #e8f5e9; border: 4px solid #2e7d32; border-radius: 15px; overflow: hidden;">
+                <div style="display: flex; flex-direction: column; justify-content: center; width: 330px; padding: 20px; background-color: #c8e6c9; border-right: 4px dashed #2e7d32;">
+                    <div style="display: flex; font-size: 26px; font-weight: bold; color: #1b5e20; margin-bottom: 5px;">${boardData.title}</div>
+                    <div style="display: flex; font-size: 16px; color: #2e7d32; margin-bottom: 12px;">${boardData.subtitle}</div>
+                    <div style="display: flex; font-size: 16px; font-weight: bold; color: #d32f2f;">${text}</div>
+                </div>
+                <div style="display: flex; flex-direction: column; justify-content: center; width: 270px; padding: 15px;">
+                    ${boardData.info1 ? `<div style="display: flex; align-items: center; font-size: 15px; color: #1b5e20; margin-bottom: 8px;">${boardData.info1}</div>` : ''}
+                    ${boardData.info2 ? `<div style="display: flex; align-items: center; font-size: 15px; color: #1b5e20; margin-bottom: 8px;">${boardData.info2}</div>` : ''}
+                    ${boardData.info3 ? `<div style="display: flex; align-items: center; font-size: 15px; color: #1b5e20; margin-bottom: 8px;">${boardData.info3}</div>` : ''}
+                </div>
+            </div>`;
+        }
+    } 
+    else {
+        // ... (この下のデータが無い時の処理は今まで通りでOKだちゅ！)
+        // 💡 3. データがなければ、今までのファイル読み込み or デフォルト看板を出すちゅ！
+        const htmlPath = path.join(__dirname, 'designs', `${todayStr}.html`);
+        const cssPath = path.join(__dirname, 'designs', `${todayStr}.css`);
+
+        if (fs.existsSync(htmlPath)) {
+            let customHtml = fs.readFileSync(htmlPath, 'utf8');
+            let customCss = fs.existsSync(cssPath) ? fs.readFileSync(cssPath, 'utf8') : '';
+            customHtml = customHtml.replace('{{text}}', text);
+            finalMarkupStr = customCss ? `<style>${customCss}</style>${customHtml}` : customHtml;
+        } else {
+            finalMarkupStr = `<div style="display: flex; flex-direction: column; background-color: #2b2d31; color: white; width: 600px; height: 150px; align-items: center; justify-content: center; border: 4px solid #FFD700; border-radius: 15px; box-shadow: 0 8px 16px rgba(0,0,0,0.5);">
+                <div style="display: flex; font-size: 32px; font-weight: bold; margin-bottom: 10px; color: #FFD700;">
+                    🐭 ねずみの案内板 🧀
+                </div>
+                <div style="display: flex; font-size: 24px; color: #e0e0e0;">
+                    ${text}
+                </div>
+            </div>`;
+        }
     }
 
     const fontBuffer = fs.readFileSync(path.join(__dirname, 'fonts', 'LINESeedJP-Regular.ttf'));
@@ -4084,19 +4231,14 @@ const generateStickyImage = async (text, forcedDateStr = null) => {
         loadAdditionalAsset: async (languageCode, segment) => {
             if (languageCode === 'emoji') {
                 try {
-                    // 絵文字をTwemoji用のURLコードに変換する賢い魔法だちゅ
                     const codePoints = Array.from(segment).map(char => char.codePointAt(0).toString(16));
                     const u = codePoints.filter(c => c !== 'fe0f').join('-');
-                    
-                    // axiosを使ってネットから直接SVGデータをダウンロードするちゅ！
                     const url = `https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/svg/${u}.svg`;
                     const res = await axios.get(url, { responseType: 'arraybuffer' });
-                    
-                    // 画像データをBase64に変換して、Satoriが読める形にして返すちゅ！
                     return `data:image/svg+xml;base64,${Buffer.from(res.data).toString('base64')}`;
                 } catch (e) {
                     console.error(`絵文字(${segment})の読み込みエラー:`, e.message);
-                    return ''; // 失敗してもプログラムが落ちないようにするちゅ
+                    return '';
                 }
             }
             return '';

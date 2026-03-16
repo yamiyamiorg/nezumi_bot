@@ -1389,7 +1389,31 @@ client.once('clientReady', async (c) => {
             ]
         },
         { name: 'kibun_setchannel', description: '心の天気図（週次レポート）を送信するチャンネルを、自分用に指定するちゅ！☁️' },
-        { name: 'kibun_resetchannel', description: '心の天気図のレポート送信先設定をリセット（解除）するちゅ！☁️' }
+        { name: 'kibun_resetchannel', description: '心の天気図のレポート送信先設定をリセット（解除）するちゅ！☁️' },
+        {
+            name: 'design_upload',
+            description: '【管理者用】日替わり看板のHTML/CSSデザインを登録するちゅ！',
+            options: [
+                {
+                    name: 'date',
+                    type: 3, // STRING (文字列)
+                    description: '表示したい日付（例: 03-16 または 12-25）',
+                    required: true
+                },
+                {
+                    name: 'html_file',
+                    type: 11, // ATTACHMENT (ファイル添付)
+                    description: 'Satori用のHTMLファイル（文字を入れる場所には {{text}} と書いてちゅ！）',
+                    required: true
+                },
+                {
+                    name: 'css_file',
+                    type: 11, // ATTACHMENT (ファイル添付)
+                    description: '読み込ませたいCSSファイル（オプションだちゅ）',
+                    required: false
+                }
+            ]
+        }
     ];
 
     const guildIds = ['1450709451488100396','1455097564759330958', '1480458980655366188']; 
@@ -3815,6 +3839,37 @@ client.on('interactionCreate', async (interaction) => {
             await interaction.editReply('もともと送信先チャンネルはセットされていないみたいだちゅ！☁️');
         }
     }
+    // 💡 /design_upload コマンド (日替わり看板デザインの登録)
+    else if (interaction.commandName === 'design_upload') {
+        await interaction.deferReply({ ephemeral: true });
+        
+        const dateStr = interaction.options.getString('date');
+        const htmlFile = interaction.options.getAttachment('html_file');
+        const cssFile = interaction.options.getAttachment('css_file');
+
+        // 💡 デザインを保存するフォルダを用意するちゅ
+        const designsDir = path.join(__dirname, 'designs');
+        if (!fs.existsSync(designsDir)) {
+            fs.mkdirSync(designsDir);
+        }
+
+        try {
+            // HTMLファイルをダウンロードして保存
+            const htmlRes = await axios.get(htmlFile.url);
+            fs.writeFileSync(path.join(designsDir, `${dateStr}.html`), htmlRes.data);
+
+            // CSSファイルがあればダウンロードして保存
+            if (cssFile) {
+                const cssRes = await axios.get(cssFile.url);
+                fs.writeFileSync(path.join(designsDir, `${dateStr}.css`), cssRes.data);
+            }
+
+            await interaction.editReply(`📅 **${dateStr}** のデザインを保存したちゅ！\n${cssFile ? 'HTMLとCSSの両方' : 'HTMLだけ'}を登録したちゅよ！🎨✨`);
+        } catch (error) {
+            console.error('デザイン保存エラー:', error);
+            await interaction.editReply('ファイルの保存に失敗しちゃったちゅ…。');
+        }
+    }
     }
 });
 // ==========================================================
@@ -3828,22 +3883,49 @@ const STICKY_CHANNEL_ID = '1479824114293145621';
 const stickyMessageIds = new Map();
 
 // 💡 Satoriを使った看板画像の生成関数
+// 💡 Satoriを使った看板画像の生成関数（日替わり対応版！）
 const generateStickyImage = async (text) => {
-    // satori-htmlを使って、HTMLとCSSでデザインを作るちゅ！
-    // ※Satoriはflexboxベースで動くから、display: flex; を多用するちゅ。
-    const markup = html`<div style="display: flex; flex-direction: column; background-color: #2b2d31; color: white; width: 600px; height: 150px; align-items: center; justify-content: center; border: 4px solid #FFD700; border-radius: 15px; box-shadow: 0 8px 16px rgba(0,0,0,0.5);">
-        <div style="display: flex; font-size: 32px; font-weight: bold; margin-bottom: 10px; color: #FFD700;">
-            🐭 ねずみの案内板 🧀
-        </div>
-        <div style="display: flex; font-size: 24px; color: #e0e0e0;">
-            ${text}
-        </div>
-    </div>`;
+    // 1. 今日の日付（MM-DD形式）を取得するちゅ
+    const d = new Date();
+    const jstD = new Date(d.getTime() + (9 * 60 * 60 * 1000));
+    const month = String(jstD.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(jstD.getUTCDate()).padStart(2, '0');
+    const todayStr = `${month}-${day}`; // 例: "03-16"
 
-    // 💡 フォントを読み込むちゅ（SatoriはBufferデータが必要だちゅ）
+    const htmlPath = path.join(__dirname, 'designs', `${todayStr}.html`);
+    const cssPath = path.join(__dirname, 'designs', `${todayStr}.css`);
+
+    let finalMarkupStr = '';
+
+    // 2. 今日のデザインファイルがアップロードされているかチェック！
+    if (fs.existsSync(htmlPath)) {
+        let customHtml = fs.readFileSync(htmlPath, 'utf8');
+        let customCss = '';
+        if (fs.existsSync(cssPath)) {
+            customCss = fs.readFileSync(cssPath, 'utf8');
+        }
+
+        // {{text}} の部分を、Botが喋るメッセージに置き換えるちゅ！
+        customHtml = customHtml.replace('{{text}}', text);
+
+        // CSSがあれば <style> タグでくっつけるちゅ！
+        finalMarkupStr = customCss ? `<style>${customCss}</style>${customHtml}` : customHtml;
+    } else {
+        // 3. 今日のデザインが無い場合は、いつものデフォルトデザインだちゅ！
+        finalMarkupStr = `<div style="display: flex; flex-direction: column; background-color: #2b2d31; color: white; width: 600px; height: 150px; align-items: center; justify-content: center; border: 4px solid #FFD700; border-radius: 15px; box-shadow: 0 8px 16px rgba(0,0,0,0.5);">
+            <div style="display: flex; font-size: 32px; font-weight: bold; margin-bottom: 10px; color: #FFD700;">
+                🐭 ねずみの案内板 🧀
+            </div>
+            <div style="display: flex; font-size: 24px; color: #e0e0e0;">
+                ${text}
+            </div>
+        </div>`;
+    }
+
+    // 💡 フォントを読み込むちゅ
     const fontBuffer = fs.readFileSync(path.join(__dirname, 'fonts', 'LINESeedJP-Regular.ttf'));
 
-    const svg = await satori(markup, {
+    const svg = await satori(html(finalMarkupStr), {
         width: 600,
         height: 150,
         fonts: [
@@ -3856,7 +3938,6 @@ const generateStickyImage = async (text) => {
         ]
     });
 
-    // 💡 SVGをPNG画像に変換するちゅ！
     const resvg = new Resvg(svg, {
         background: 'transparent',
         fitTo: { mode: 'original' },

@@ -1400,6 +1400,13 @@ client.once('clientReady', async (c) => {
                     description: '表示したい日付（例: 03-16 または 12-25）',
                     required: true
                 },
+                // 💡 【追加】イベント名を入力する枠だちゅ！
+                {
+                    name: 'event_name',
+                    type: 3, // STRING (文字列)
+                    description: 'イベントの名前（例: ひな祭り、クリスマス）',
+                    required: true
+                },
                 {
                     name: 'html_file',
                     type: 11, // ATTACHMENT (ファイル添付)
@@ -3856,43 +3863,52 @@ client.on('interactionCreate', async (interaction) => {
         }
     }
     // 💡 /design_upload コマンド (日替わり看板デザインの登録)
+    // 💡 /design_upload コマンド (日替わり看板デザインの登録)
     else if (interaction.commandName === 'design_upload') {
         await interaction.deferReply({ ephemeral: true });
         
         const dateStr = interaction.options.getString('date');
+        const eventName = interaction.options.getString('event_name'); // 💡 イベント名を受け取るちゅ！
         const htmlFile = interaction.options.getAttachment('html_file');
         const cssFile = interaction.options.getAttachment('css_file');
 
-        // 💡 デザインを保存するフォルダを用意するちゅ
         const designsDir = path.join(__dirname, 'designs');
         if (!fs.existsSync(designsDir)) {
             fs.mkdirSync(designsDir);
         }
 
         try {
-            // HTMLファイルをダウンロードして保存
+            // HTMLとCSSの保存
             const htmlRes = await axios.get(htmlFile.url);
             fs.writeFileSync(path.join(designsDir, `${dateStr}.html`), htmlRes.data);
 
-            // CSSファイルがあればダウンロードして保存
             if (cssFile) {
                 const cssRes = await axios.get(cssFile.url);
                 fs.writeFileSync(path.join(designsDir, `${dateStr}.css`), cssRes.data);
             }
 
-            await interaction.editReply(`📅 **${dateStr}** のデザインを保存したちゅ！\n${cssFile ? 'HTMLとCSSの両方' : 'HTMLだけ'}を登録したちゅよ！🎨✨`);
+            // 💡 イベント名を events.json というメモ帳に保存するちゅ！
+            const eventsPath = path.join(designsDir, 'events.json');
+            let eventsData = {};
+            if (fs.existsSync(eventsPath)) {
+                eventsData = JSON.parse(fs.readFileSync(eventsPath, 'utf8'));
+            }
+            eventsData[dateStr] = eventName; // 日付と名前をセットで記録！
+            fs.writeFileSync(eventsPath, JSON.stringify(eventsData, null, 2));
+
+            await interaction.editReply(`📅 **${dateStr}** [🏷️ ${eventName}] のデザインを保存したちゅ！🎨✨`);
         } catch (error) {
             console.error('デザイン保存エラー:', error);
             await interaction.editReply('ファイルの保存に失敗しちゃったちゅ…。');
         }
     }
+
     // 💡 /design_list コマンド (登録済みデザインのリスト表示)
     else if (interaction.commandName === 'design_list') {
-        await interaction.deferReply({ ephemeral: true }); // 自分だけに見えるようにするちゅ！
+        await interaction.deferReply({ ephemeral: true });
         
         const designsDir = path.join(__dirname, 'designs');
 
-        // フォルダ自体がない、または空っぽの場合
         if (!fs.existsSync(designsDir)) {
             return interaction.editReply('まだ何もデザインが登録されていないみたいだちゅ！📂');
         }
@@ -3904,12 +3920,20 @@ client.on('interactionCreate', async (interaction) => {
             return interaction.editReply('登録されている日替わり看板はないみたいだちゅ！📂');
         }
 
-        // リストのテキストを作るちゅ！
+        // 💡 イベント名のメモ帳を読み込むちゅ！
+        const eventsPath = path.join(designsDir, 'events.json');
+        let eventsData = {};
+        if (fs.existsSync(eventsPath)) {
+            eventsData = JSON.parse(fs.readFileSync(eventsPath, 'utf8'));
+        }
+
         let listStr = '📋 **現在登録されている日替わりデザイン一覧だちゅ！**\n\n';
         htmlFiles.forEach(file => {
             const dateStr = file.replace('.html', '');
             const hasCss = files.includes(`${dateStr}.css`);
-            listStr += `・📅 **${dateStr}** (HTML${hasCss ? ' ＆ CSS' : ''})\n`;
+            const eName = eventsData[dateStr] || '名前なし'; // メモ帳から名前を引っ張ってくるちゅ！
+            
+            listStr += `・📅 **${dateStr}** 🏷️ **${eName}** (HTML${hasCss ? ' ＆ CSS' : ''})\n`;
         });
 
         await interaction.editReply(listStr);
@@ -3924,22 +3948,25 @@ client.on('interactionCreate', async (interaction) => {
         
         const htmlPath = path.join(designsDir, `${dateStr}.html`);
         const cssPath = path.join(designsDir, `${dateStr}.css`);
+        const eventsPath = path.join(designsDir, 'events.json'); // 💡 メモ帳のパス
 
         let deleted = false;
 
-        // HTMLファイルを消すちゅ
-        if (fs.existsSync(htmlPath)) {
-            fs.unlinkSync(htmlPath);
-            deleted = true;
-        }
-        // CSSファイルを消すちゅ
-        if (fs.existsSync(cssPath)) {
-            fs.unlinkSync(cssPath);
-            deleted = true;
+        // 画像の元データを消すちゅ
+        if (fs.existsSync(htmlPath)) { fs.unlinkSync(htmlPath); deleted = true; }
+        if (fs.existsSync(cssPath)) { fs.unlinkSync(cssPath); deleted = true; }
+
+        // 💡 メモ帳（events.json）からも名前の記録を消しておくちゅ！
+        if (deleted && fs.existsSync(eventsPath)) {
+            let eventsData = JSON.parse(fs.readFileSync(eventsPath, 'utf8'));
+            if (eventsData[dateStr]) {
+                delete eventsData[dateStr];
+                fs.writeFileSync(eventsPath, JSON.stringify(eventsData, null, 2));
+            }
         }
 
         if (deleted) {
-            await interaction.editReply(`🗑️ **${dateStr}** のデザインを綺麗にお掃除したちゅ！✨`);
+            await interaction.editReply(`🗑️ **${dateStr}** のデザインと記録を綺麗にお掃除したちゅ！✨`);
         } else {
             await interaction.editReply(`🤔 **${dateStr}** のデザインは見つからなかったちゅ。 \`/design_list\` で日付が合っているか確認してみてちゅ！`);
         }
@@ -3950,42 +3977,72 @@ client.on('interactionCreate', async (interaction) => {
 // 📌 チャンネル最下段固定画像（Sticky Message）の魔法
 // ==========================================================
 
-// 💡 1. 固定表示したいチャンネルのIDをここに入れるちゅ！（複数ある場合は配列にしてもOKだちゅ）
+// 💡 1. 固定表示したいチャンネルのIDをここに入れるちゅ！
 const STICKY_CHANNEL_ID = '1479824114293145621';
 
-// 💡 チャンネルごとに最後に送信した画像のメッセージIDを記憶する箱
+// 💡 【進化】再起動しても忘れないようにメモ帳(JSON)を用意するちゅ！
+const stickyDataPath = path.join(__dirname, 'sticky.json');
 const stickyMessageIds = new Map();
 
-// 💡 Satoriを使った看板画像の生成関数
-// 💡 Satoriを使った看板画像の生成関数（日替わり対応版！）
+// 起動時にメモ帳を読み込む
+if (fs.existsSync(stickyDataPath)) {
+    try {
+        const data = JSON.parse(fs.readFileSync(stickyDataPath, 'utf8'));
+        for (const [chId, msgId] of Object.entries(data)) {
+            stickyMessageIds.set(chId, msgId);
+        }
+    } catch(e) { console.error('看板データの読み込みエラーだちゅ:', e); }
+}
+
+// メモ帳に保存する関数
+const saveStickyData = () => {
+    const obj = Object.fromEntries(stickyMessageIds);
+    fs.writeFileSync(stickyDataPath, JSON.stringify(obj, null, 2));
+};
+
+// 💡 【新規】ボットが目を覚ました時（再起動時）に、古い看板をお掃除する魔法！
+client.once('ready', async () => {
+    for (const [channelId, messageId] of stickyMessageIds.entries()) {
+        try {
+            const channel = await client.channels.fetch(channelId);
+            if (channel) {
+                const oldMsg = await channel.messages.fetch(messageId);
+                if (oldMsg) {
+                    await oldMsg.delete();
+                    console.log(`🧹 再起動お掃除: ${channelId} の古い看板を削除したちゅ！`);
+                }
+            }
+        } catch (e) {
+            // すでに誰かが手で消していた場合は気にしないちゅ！
+        }
+    }
+    // お掃除が終わったらリストを空にして、メモ帳も綺麗にするちゅ！
+    stickyMessageIds.clear();
+    saveStickyData();
+});
+
+// 💡 Satoriを使った看板画像の生成関数（日替わり対応版）
 const generateStickyImage = async (text) => {
-    // 1. 今日の日付（MM-DD形式）を取得するちゅ
     const d = new Date();
     const jstD = new Date(d.getTime() + (9 * 60 * 60 * 1000));
     const month = String(jstD.getUTCMonth() + 1).padStart(2, '0');
     const day = String(jstD.getUTCDate()).padStart(2, '0');
-    const todayStr = `${month}-${day}`; // 例: "03-16"
+    const todayStr = `${month}-${day}`; 
 
     const htmlPath = path.join(__dirname, 'designs', `${todayStr}.html`);
     const cssPath = path.join(__dirname, 'designs', `${todayStr}.css`);
 
     let finalMarkupStr = '';
 
-    // 2. 今日のデザインファイルがアップロードされているかチェック！
     if (fs.existsSync(htmlPath)) {
         let customHtml = fs.readFileSync(htmlPath, 'utf8');
         let customCss = '';
         if (fs.existsSync(cssPath)) {
             customCss = fs.readFileSync(cssPath, 'utf8');
         }
-
-        // {{text}} の部分を、Botが喋るメッセージに置き換えるちゅ！
         customHtml = customHtml.replace('{{text}}', text);
-
-        // CSSがあれば <style> タグでくっつけるちゅ！
         finalMarkupStr = customCss ? `<style>${customCss}</style>${customHtml}` : customHtml;
     } else {
-        // 3. 今日のデザインが無い場合は、いつものデフォルトデザインだちゅ！
         finalMarkupStr = `<div style="display: flex; flex-direction: column; background-color: #2b2d31; color: white; width: 600px; height: 150px; align-items: center; justify-content: center; border: 4px solid #FFD700; border-radius: 15px; box-shadow: 0 8px 16px rgba(0,0,0,0.5);">
             <div style="display: flex; font-size: 32px; font-weight: bold; margin-bottom: 10px; color: #FFD700;">
                 🐭 ねずみの案内板 🧀
@@ -3996,35 +4053,22 @@ const generateStickyImage = async (text) => {
         </div>`;
     }
 
-    // 💡 フォントを読み込むちゅ
     const fontBuffer = fs.readFileSync(path.join(__dirname, 'fonts', 'LINESeedJP-Regular.ttf'));
 
     const svg = await satori(html(finalMarkupStr), {
         width: 600,
         height: 150,
-        fonts: [
-            {
-                name: 'NotoSansJP',
-                data: fontBuffer,
-                weight: 400,
-                style: 'normal',
-            }
-        ]
+        fonts: [{ name: 'NotoSansJP', data: fontBuffer, weight: 400, style: 'normal' }]
     });
 
-    const resvg = new Resvg(svg, {
-        background: 'transparent',
-        fitTo: { mode: 'original' },
-    });
+    const resvg = new Resvg(svg, { background: 'transparent', fitTo: { mode: 'original' } });
     return resvg.render().asPng();
 };
 
-// 💡 誰かがメッセージを書き込んだ時の処理（messageCreateイベント）
+// 💡 誰かがメッセージを書き込んだ時の処理
 client.on('messageCreate', async (message) => {
-    // ねずみ自身や他のBotの書き込みには反応しないようにするちゅ！無限ループ防止だちゅ！
     if (message.author.bot) return;
 
-    // 指定したチャンネルでのみ動くようにするちゅ
     if (message.channelId === STICKY_CHANNEL_ID) {
         
         // ① 前にねずみが置いた画像があれば消すちゅ！
@@ -4033,24 +4077,23 @@ client.on('messageCreate', async (message) => {
             try {
                 const lastMsg = await message.channel.messages.fetch(lastId);
                 if (lastMsg) await lastMsg.delete();
-            } catch (e) {
-                // 古いメッセージが既に消されていた場合は気にせず次へ進むちゅ
-            }
+            } catch (e) {}
         }
 
         // ② Satoriで新しい画像を作って、一番下に送信するちゅ！
         try {
             const pngBuffer = await generateStickyImage('いつでも最新の情報をここでお知らせするちゅ！');
             const attachment = new AttachmentBuilder(pngBuffer, { name: 'sticky_banner.png' });
-
             const sentMsg = await message.channel.send({ files: [attachment] });
 
-            // ③ 新しく置いた画像のメッセージIDを記憶しておくちゅ！
+            // ③ 【進化】新しく置いた画像のIDを記憶して、メモ帳に保存するちゅ！
             stickyMessageIds.set(message.channelId, sentMsg.id);
+            saveStickyData();
         } catch (e) {
             console.error('最下段画像の設置エラーだちゅ:', e);
         }
     }
+
 });
 
 client.login(process.env.DISCORD_TOKEN);

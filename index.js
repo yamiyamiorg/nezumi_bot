@@ -3943,6 +3943,7 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     // 💡 /design_list コマンド (登録済みデザインのリスト表示)
+    // 💡 /design_list コマンド (登録済みデザインのリスト表示)
     else if (interaction.commandName === 'design_list') {
         await interaction.deferReply({ ephemeral: true });
         
@@ -3955,25 +3956,39 @@ client.on('interactionCreate', async (interaction) => {
         const files = fs.readdirSync(designsDir);
         const htmlFiles = files.filter(f => f.endsWith('.html'));
 
-        if (htmlFiles.length === 0) {
-            return interaction.editReply('登録されている日替わり看板はないみたいだちゅ！📂');
-        }
-
-        // 💡 イベント名のメモ帳を読み込むちゅ！
+        // ① アップロードされたファイルの記録を読み込むちゅ
         const eventsPath = path.join(designsDir, 'events.json');
         let eventsData = {};
         if (fs.existsSync(eventsPath)) {
             eventsData = JSON.parse(fs.readFileSync(eventsPath, 'utf8'));
         }
 
+        // ② モーダルで設定したテンプレートの記録を読み込むちゅ！
+        const modalDataPath = path.join(designsDir, 'events_data.json');
+        let modalEventsData = {};
+        if (fs.existsSync(modalDataPath)) {
+            modalEventsData = JSON.parse(fs.readFileSync(modalDataPath, 'utf8'));
+        }
+
+        if (htmlFiles.length === 0 && Object.keys(modalEventsData).length === 0) {
+            return interaction.editReply('登録されている日替わり看板はないみたいだちゅ！📂');
+        }
+
         let listStr = '📋 **現在登録されている日替わりデザイン一覧だちゅ！**\n\n';
+
+        // 💡 アップロードされたHTMLファイルのリストを追加
         htmlFiles.forEach(file => {
             const dateStr = file.replace('.html', '');
             const hasCss = files.includes(`${dateStr}.css`);
-            const eName = eventsData[dateStr] || '名前なし'; // メモ帳から名前を引っ張ってくるちゅ！
-            
-            listStr += `・📅 **${dateStr}** 🏷️ **${eName}** (HTML${hasCss ? ' ＆ CSS' : ''})\n`;
+            const eName = eventsData[dateStr] || '名前なし';
+            listStr += `・📅 **${dateStr}** 🏷️ **${eName}** (📂 アップロード HTML${hasCss ? '＆CSS' : ''})\n`;
         });
+
+        // 💡 モーダルで設定したテンプレートのリストを追加
+        for (const [dateStr, data] of Object.entries(modalEventsData)) {
+            const tName = data.template === 'pop_pink' ? '🌸ポップ' : data.template === 'elegant_gold' ? '🟡エレガント' : '🟢チケット風';
+            listStr += `・📅 **${dateStr}** 🏷️ **${data.title}** (🎨 テンプレート: ${tName})\n`;
+        }
 
         await interaction.editReply(listStr);
     }
@@ -3987,25 +4002,37 @@ client.on('interactionCreate', async (interaction) => {
         
         const htmlPath = path.join(designsDir, `${dateStr}.html`);
         const cssPath = path.join(designsDir, `${dateStr}.css`);
-        const eventsPath = path.join(designsDir, 'events.json'); // 💡 メモ帳のパス
+        const eventsPath = path.join(designsDir, 'events.json'); 
+        const modalDataPath = path.join(designsDir, 'events_data.json'); // 💡 モーダル用のメモ帳
 
         let deleted = false;
+        let deletedTypes = [];
 
-        // 画像の元データを消すちゅ
-        if (fs.existsSync(htmlPath)) { fs.unlinkSync(htmlPath); deleted = true; }
+        // ① アップロードされた画像を消すちゅ
+        if (fs.existsSync(htmlPath)) { fs.unlinkSync(htmlPath); deleted = true; deletedTypes.push('ファイル'); }
         if (fs.existsSync(cssPath)) { fs.unlinkSync(cssPath); deleted = true; }
-
-        // 💡 メモ帳（events.json）からも名前の記録を消しておくちゅ！
+        
         if (deleted && fs.existsSync(eventsPath)) {
-            let eventsData = JSON.parse(fs.readFileSync(eventsPath, 'utf8'));
-            if (eventsData[dateStr]) {
-                delete eventsData[dateStr];
-                fs.writeFileSync(eventsPath, JSON.stringify(eventsData, null, 2));
+            let evData = JSON.parse(fs.readFileSync(eventsPath, 'utf8'));
+            if (evData[dateStr]) {
+                delete evData[dateStr];
+                fs.writeFileSync(eventsPath, JSON.stringify(evData, null, 2));
+            }
+        }
+
+        // ② モーダルで登録したデータ（events_data.json）からも消すちゅ！
+        if (fs.existsSync(modalDataPath)) {
+            let modalData = JSON.parse(fs.readFileSync(modalDataPath, 'utf8'));
+            if (modalData[dateStr]) {
+                delete modalData[dateStr]; // その日付のデータをメモ帳から消す！
+                fs.writeFileSync(modalDataPath, JSON.stringify(modalData, null, 2));
+                deleted = true;
+                deletedTypes.push('テンプレート設定');
             }
         }
 
         if (deleted) {
-            await interaction.editReply(`🗑️ **${dateStr}** のデザインと記録を綺麗にお掃除したちゅ！✨`);
+            await interaction.editReply(`🗑️ **${dateStr}** のデザイン（${deletedTypes.join('と')}）を綺麗にお掃除したちゅ！✨`);
         } else {
             await interaction.editReply(`🤔 **${dateStr}** のデザインは見つからなかったちゅ。 \`/design_list\` で日付が合っているか確認してみてちゅ！`);
         }

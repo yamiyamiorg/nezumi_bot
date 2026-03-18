@@ -4235,7 +4235,7 @@ const generateStickyImage = async (text, forcedDateStr = null) => {
             finalMarkupStr = customCss ? `<style>${customCss}</style>${customHtml}` : customHtml;
         } else {
             finalMarkupStr = `<div style="display: flex; flex-direction: column; background-color: #2b2d31; color: white; width: 600px; height: 150px; align-items: center; justify-content: center; border: 4px solid #f5c4c9; border-radius: 15px; box-shadow: 0 8px 16px rgba(0,0,0,0.5);">
-                <div style="display: flex; font-size: 32px; font-weight: bold; margin-bottom: 10px; color: #FFD700;">
+                <div style="display: flex; font-size: 32px; font-weight: bold; margin-bottom: 10px; color: #f5c4c9;">
                     🐭 ねずみの案内板 🧀
                 </div>
                 <div style="display: flex; font-size: 24px; color: #e0e0e0;">

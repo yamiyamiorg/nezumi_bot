@@ -1445,6 +1445,16 @@ client.once('clientReady', async (c) => {
                     ]
                 }
             ]
+        },
+        {
+            name: 'temp_setup',
+            description: '【管理者用】臨時情報の看板（赤色ベース）を設定するちゅ！',
+            default_member_permissions: '8'
+        },
+        {
+            name: 'temp_remove',
+            description: '【管理者用】臨時情報の看板を取り下げる（消す）ちゅ！',
+            default_member_permissions: '8'
         }
     ]; // ⬅️ ここがコマンドリストの終わり
 
@@ -4097,6 +4107,47 @@ client.on('interactionCreate', async (interaction) => {
 
         await interaction.editReply(`📅 **${dateStr}** の看板データを登録したちゅ！📝✨\n\`/design_test date:${dateStr}\` でプレビューを見てみてちゅ！`);
     }
+    // 💡 /temp_setup コマンド (臨時看板の入力画面を出す)
+    else if (interaction.commandName === 'temp_setup') {
+        const { ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+        const modal = new ModalBuilder().setCustomId('modal_temp_setup').setTitle('🚨 臨時看板の設定');
+
+        const titleInput = new TextInputBuilder().setCustomId('title').setLabel('タイトル（例: 臨時メンテナンスのお知らせ）').setPlaceholder('例: 🚨 ボット停止のお知らせ').setStyle(TextInputStyle.Short).setRequired(true);
+        const descInput = new TextInputBuilder().setCustomId('desc').setLabel('内容（改行もできるちゅ！）').setPlaceholder('例: 本日22時よりメンテナンスを行います。').setStyle(TextInputStyle.Paragraph).setRequired(true);
+
+        modal.addComponents(
+            new ActionRowBuilder().addComponents(titleInput),
+            new ActionRowBuilder().addComponents(descInput)
+        );
+
+        await interaction.showModal(modal);
+    }
+    
+    // 💡 /temp_remove コマンド (臨時看板を消す)
+    else if (interaction.commandName === 'temp_remove') {
+        await interaction.deferReply({ ephemeral: true });
+        const tempPath = path.join(__dirname, 'designs', 'temp_board.json');
+        
+        if (fs.existsSync(tempPath)) {
+            fs.unlinkSync(tempPath);
+            await interaction.editReply('🗑️ 臨時看板を取り下げたちゅ！次のチャットから元の看板だけになるちゅよ！');
+        } else {
+            await interaction.editReply('🤔 今は臨時看板は出てないみたいだちゅ！');
+        }
+    }
+    
+    // 💡 臨時看板のモーダル送信を受け取って保存する
+    else if (interaction.isModalSubmit() && interaction.customId === 'modal_temp_setup') {
+        await interaction.deferReply({ ephemeral: true });
+        
+        const title = interaction.fields.getTextInputValue('title');
+        const desc = interaction.fields.getTextInputValue('desc');
+        
+        const tempPath = path.join(__dirname, 'designs', 'temp_board.json');
+        fs.writeFileSync(tempPath, JSON.stringify({ title, desc }, null, 2));
+
+        await interaction.editReply('🚨 臨時看板をセットしたちゅ！次のメッセージから、日替わり看板の上に目立つように表示されるちゅよ！');
+    }
     
 });
 // ==========================================================
@@ -4254,6 +4305,69 @@ const generateStickyImage = async (text, forcedDateStr = null) => {
     const resvg = new Resvg(svg, { background: 'transparent', fitTo: { mode: 'original' } });
     return resvg.render().asPng();
 };
+// ==========================================================
+// 🚨 臨時看板の画像を作る魔法だちゅ！
+// ==========================================================
+const generateTempStickyImage = async (tempData) => {
+    const fontBuffer = fs.readFileSync(path.join(__dirname, 'fonts', 'LINESeedJP-Regular.ttf'));
+    
+    // 改行をHTMLで表示できるように変換するちゅ
+    const descLines = tempData.desc.split('\n').map(line => `<div style="display: flex;">${line || '　'}</div>`).join('');
+
+    // 目立つ赤色ベースのデザインだちゅ！
+    const markup = `
+    <div style="display: flex; flex-direction: column; justify-content: center; width: 600px; height: 180px; background-color: #fff5f5; border: 6px solid #e53e3e; border-radius: 15px; padding: 20px; box-sizing: border-box;">
+        <div style="display: flex; font-size: 26px; font-weight: bold; color: #c53030; margin-bottom: 8px; border-bottom: 2px dashed #fc8181; padding-bottom: 5px;">
+            ${tempData.title}
+        </div>
+        <div style="display: flex; flex-direction: column; font-size: 18px; color: #2d3748; line-height: 1.5;">
+            ${descLines}
+        </div>
+    </div>`;
+
+    const svg = await satori(html(markup), {
+        width: 600,
+        height: 180,
+        fonts: [{ name: 'NotoSansJP', data: fontBuffer, weight: 400, style: 'normal' }],
+        loadAdditionalAsset: async (languageCode, segment) => {
+            if (languageCode === 'emoji') {
+                try {
+                    const codePoints = Array.from(segment).map(char => char.codePointAt(0).toString(16));
+                    const u = codePoints.filter(c => c !== 'fe0f').join('-');
+                    const res = await axios.get(`https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/svg/${u}.svg`, { responseType: 'arraybuffer' });
+                    return `data:image/svg+xml;base64,${Buffer.from(res.data).toString('base64')}`;
+                } catch (e) { return ''; }
+            }
+            return '';
+        }
+    });
+
+    const resvg = new Resvg(svg, { background: 'transparent', fitTo: { mode: 'original' } });
+    return resvg.render().asPng();
+};
+
+// ==========================================================
+// 📦 画像たちをセットにして準備するまとめ役だちゅ！
+// ==========================================================
+const getStickyAttachments = async () => {
+    const files = [];
+
+    // 1. 臨時看板（もしあれば先頭(上)に追加するちゅ！）
+    const tempPath = path.join(__dirname, 'designs', 'temp_board.json');
+    if (fs.existsSync(tempPath)) {
+        try {
+            const tempData = JSON.parse(fs.readFileSync(tempPath, 'utf8'));
+            const tempBuffer = await generateTempStickyImage(tempData);
+            files.push(new AttachmentBuilder(tempBuffer, { name: 'temp_banner.png' }));
+        } catch(e) { console.error('臨時看板エラー:', e); }
+    }
+
+    // 2. 日替わり看板（いつもの）を次(下)に追加するちゅ！
+    const dailyBuffer = await generateStickyImage('いつでも最新の情報をここでお知らせするちゅ！');
+    files.push(new AttachmentBuilder(dailyBuffer, { name: 'sticky_banner.png' }));
+
+    return files; // 1枚〜2枚の画像をセットにして返すちゅ！
+};
 
 // 💡 誰かがメッセージを書き込んだ時の処理
 client.on('messageCreate', async (message) => {
@@ -4272,9 +4386,8 @@ client.on('messageCreate', async (message) => {
 
         // ② Satoriで新しい画像を作って、一番下に送信するちゅ！
         try {
-            const pngBuffer = await generateStickyImage('いつでも最新の情報をここでお知らせするちゅ！');
-            const attachment = new AttachmentBuilder(pngBuffer, { name: 'sticky_banner.png' });
-            const sentMsg = await message.channel.send({ files: [attachment] });
+            const attachments = await getStickyAttachments();
+            const sentMsg = await message.channel.send({ files: attachments });
 
             // ③ 新しく置いた画像のIDを記憶して、メモ帳に保存するちゅ！
             stickyMessageIds.set(message.channelId, sentMsg.id);
@@ -4307,9 +4420,8 @@ cron.schedule('0 0 * * *', async () => {
         }
 
         // 💡 3. 新しい「今日の日付」の画像を作って、送信するちゅ！
-        const pngBuffer = await generateStickyImage('いつでも最新の情報をここでお知らせするちゅ！');
-        const attachment = new AttachmentBuilder(pngBuffer, { name: 'sticky_banner.png' });
-        const sentMsg = await channel.send({ files: [attachment] });
+        const attachments = await getStickyAttachments();
+        const sentMsg = await channel.send({ files: attachments });
 
         // 💡 4. 新しい画像のIDを記憶してメモ帳に保存するちゅ！
         stickyMessageIds.set(STICKY_CHANNEL_ID, sentMsg.id);

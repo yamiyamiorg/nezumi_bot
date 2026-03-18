@@ -4097,7 +4097,7 @@ client.on('interactionCreate', async (interaction) => {
 
         await interaction.editReply(`📅 **${dateStr}** の看板データを登録したちゅ！📝✨\n\`/design_test date:${dateStr}\` でプレビューを見てみてちゅ！`);
     }
-    }
+    
 });
 // ==========================================================
 // 📌 チャンネル最下段固定画像（Sticky Message）の魔法

@@ -1478,7 +1478,7 @@ client.once('clientReady', async (c) => {
         }
     ]; // ⬅️ ここがコマンドリストの終わり
 
-    const guildIds = ['1450709451488100396','1455097564759330958', '1480458980655366188']; 
+    const guildIds = ['1450709451488100396','1483795902610145463', '1480458980655366188']; 
     await client.application.commands.set([]); // グローバルコマンドをリセット
 
     for (const id of guildIds) {
@@ -4124,7 +4124,7 @@ client.on('interactionCreate', async (interaction) => {
 // ==========================================================
 
 // 💡 1. 固定表示したいチャンネルのIDをここに入れるちゅ！
-const STICKY_CHANNEL_ID = '1479824114293145621';
+const STICKY_CHANNEL_ID = '1483795904183140374';
 
 // 💡 再起動しても忘れないようにメモ帳(JSON)を用意するちゅ！
 const stickyDataPath = path.join(__dirname, 'sticky.json');

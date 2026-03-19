@@ -1441,7 +1441,10 @@ client.once('clientReady', async (c) => {
                     choices: [
                         { name: '🟢 チケット風 (グリーン)', value: 'ticket_green' },
                         { name: '🟡 エレガント (ブラック＆ゴールド)', value: 'elegant_gold' },
-                        { name: '🌸 ポップ (パステルピンク)', value: 'pop_pink' }
+                        { name: '🌸 ポップ (パステルピンク)', value: 'pop_pink' },
+                        // 💡 【追加】ここから下の2行を追加するちゅ！
+                        { name: '🔮 ミスティック (パープル)', value: 'mystic_purple' },
+                        { name: '💧 アクア (ライトブルー)', value: 'aqua_blue' }
                     ]
                 }
             ]
@@ -3975,11 +3978,16 @@ client.on('interactionCreate', async (interaction) => {
         });
 
         // 💡 モーダルで設定したテンプレートのリストを追加
+        // 💡 モーダルで設定したテンプレートのリストを追加
         for (const [dateStr, data] of Object.entries(modalEventsData)) {
-            const tName = data.template === 'pop_pink' ? '🌸ポップ' : data.template === 'elegant_gold' ? '🟡エレガント' : '🟢チケット風';
+            // 💡 【修正】新しいテーマの表示名を追加したちゅ！
+            const tName = data.template === 'pop_pink' ? '🌸ポップ' : 
+                          data.template === 'elegant_gold' ? '🟡エレガント' : 
+                          data.template === 'mystic_purple' ? '🔮ミスティック' :
+                          data.template === 'aqua_blue' ? '💧アクア' : '🟢チケット風';
+            
             listStr += `・📅 **${dateStr}** 🏷️ **${data.title}** (🎨 テンプレート: ${tName})\n`;
         }
-
         await interaction.editReply(listStr);
     }
 
@@ -4232,6 +4240,36 @@ const generateStickyImage = async (text, forcedDateStr = null) => {
                     ${boardData.info1 ? `<div style="display: flex; align-items: center; font-size: 15px; color: #db7093; margin-bottom: 8px;">${boardData.info1}</div>` : ''}
                     ${boardData.info2 ? `<div style="display: flex; align-items: center; font-size: 15px; color: #db7093; margin-bottom: 8px;">${boardData.info2}</div>` : ''}
                     ${boardData.info3 ? `<div style="display: flex; align-items: center; font-size: 15px; color: #db7093; margin-bottom: 8px;">${boardData.info3}</div>` : ''}
+                </div>
+            </div>`;
+        } else if (tType === 'mystic_purple') {
+            // 🔮 ミスティック（パープル: #ab8dd6 ベース）
+            finalMarkupStr = `
+            <div style="display: flex; flex-direction: row; width: 600px; height: 150px; background-color: #f5f0fa; border: 4px solid #ab8dd6; border-radius: 20px; overflow: hidden;">
+                <div style="display: flex; flex-direction: column; justify-content: center; width: 330px; padding: 20px; background-color: #e8dbf4; border-right: 4px solid #ab8dd6;">
+                    <div style="display: flex; font-size: 26px; font-weight: bold; color: #5a3c85; margin-bottom: 5px;">${boardData.title}</div>
+                    <div style="display: flex; font-size: 16px; color: #7a58a6; margin-bottom: 12px;">${boardData.subtitle}</div>
+                    <div style="display: flex; font-size: 16px; font-weight: bold; color: #4b2b73;">${text}</div>
+                </div>
+                <div style="display: flex; flex-direction: column; justify-content: center; width: 270px; padding: 15px;">
+                    ${boardData.info1 ? `<div style="display: flex; align-items: center; font-size: 15px; color: #5a3c85; margin-bottom: 8px;">${boardData.info1}</div>` : ''}
+                    ${boardData.info2 ? `<div style="display: flex; align-items: center; font-size: 15px; color: #5a3c85; margin-bottom: 8px;">${boardData.info2}</div>` : ''}
+                    ${boardData.info3 ? `<div style="display: flex; align-items: center; font-size: 15px; color: #5a3c85; margin-bottom: 8px;">${boardData.info3}</div>` : ''}
+                </div>
+            </div>`;
+        } else if (tType === 'aqua_blue') {
+            // 💧 アクア（ライトブルー: #ace9ff ベース）
+            finalMarkupStr = `
+            <div style="display: flex; flex-direction: row; width: 600px; height: 150px; background-color: #f2fcff; border: 6px solid #ace9ff; border-radius: 10px; overflow: hidden;">
+                <div style="display: flex; flex-direction: column; justify-content: center; width: 330px; padding: 20px; background-color: #e0f6ff; border-right: 4px dashed #84d2f0;">
+                    <div style="display: flex; font-size: 26px; font-weight: bold; color: #25769c; margin-bottom: 5px;">${boardData.title}</div>
+                    <div style="display: flex; font-size: 16px; color: #439bc7; margin-bottom: 12px;">${boardData.subtitle}</div>
+                    <div style="display: flex; font-size: 16px; font-weight: bold; color: #175d7e;">${text}</div>
+                </div>
+                <div style="display: flex; flex-direction: column; justify-content: center; width: 270px; padding: 15px;">
+                    ${boardData.info1 ? `<div style="display: flex; align-items: center; font-size: 15px; color: #25769c; margin-bottom: 8px;">${boardData.info1}</div>` : ''}
+                    ${boardData.info2 ? `<div style="display: flex; align-items: center; font-size: 15px; color: #25769c; margin-bottom: 8px;">${boardData.info2}</div>` : ''}
+                    ${boardData.info3 ? `<div style="display: flex; align-items: center; font-size: 15px; color: #25769c; margin-bottom: 8px;">${boardData.info3}</div>` : ''}
                 </div>
             </div>`;
         } else {

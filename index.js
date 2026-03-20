@@ -1765,10 +1765,10 @@ client.on('interactionCreate', async (interaction) => {
             if (interaction.customId !== 'sushi_select_order' && interaction.customId !== 'oaiso_add_item' && interaction.customId !== 'oaiso_bill_please' && !interaction.customId.startsWith('btn_atk') && !interaction.customId.startsWith('btn_def') && !interaction.customId.startsWith('btn_sp') && !interaction.customId.startsWith('btn_special') && interaction.customId !== 'catch_attempt' && interaction.customId !== 'catch_ignore' && interaction.customId !== 'kibun_select_channel' && interaction.customId !== 'correct_nezumi' && interaction.customId !== 'incorrect_nezumi') {
                 try { 
                     if (interaction.isModalSubmit()) {
-                        // 💡 【修正】臨時看板(modal_temp_setup)も「自分だけに見える」に仲間入りさせるちゅ！
                         // 💡 【修正】臨時看板(startsWith)も「自分だけに見える」に仲間入りさせるちゅ！
                         if (interaction.customId && (interaction.customId.startsWith('modal_event_') || interaction.customId.startsWith('modal_temp_setup'))) {
-                            await interaction.deferReply({ ephemeral: true });
+                            // 💡 【修正】古い ephemeral: true ではなく、新しい flags を使うちゅ！
+                            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
                         } else {
                             // 他のゲームや天気のモーダルは設定を引き継ぐちゅ
                             await interaction.deferReply({ flags: currentFlags });
@@ -1781,22 +1781,6 @@ client.on('interactionCreate', async (interaction) => {
             }
         }
 
-        // ここに引っかかったら、まずはローディング状態にするちゅ
-        if (interaction.isButton() || interaction.isModalSubmit() || interaction.isStringSelectMenu() || interaction.isUserSelectMenu()) {
-            
-            // 例外処理：おあいそゲームの中のボタン・メニューは deferUpdate 済みなのでスキップ
-            if (interaction.customId !== 'sushi_select_order' && interaction.customId !== 'oaiso_add_item' && interaction.customId !== 'oaiso_bill_please' && !interaction.customId.startsWith('btn_atk') && !interaction.customId.startsWith('btn_def') && !interaction.customId.startsWith('btn_sp') && !interaction.customId.startsWith('btn_special') && interaction.customId !== 'catch_attempt' && interaction.customId !== 'catch_ignore' && interaction.customId !== 'kibun_select_channel' && interaction.customId !== 'correct_nezumi' && interaction.customId !== 'incorrect_nezumi') {
-                try { 
-                    if (interaction.isModalSubmit()) {
-                        // 💡 モーダル送信後も、非表示/表示の設定を引き継いで結果を出すちゅ！
-                        await interaction.deferReply({ flags: currentFlags });
-                    } else {
-                        await interaction.deferUpdate(); 
-                        await interaction.editReply({ components: [] });
-                    }
-                } catch(e) {} 
-            }
-        }
         
         // 🔮 タロット (btn_tarot)
         if (interaction.customId === 'btn_tarot') {
@@ -4458,6 +4442,9 @@ const generateStickyImage = async (text, forcedDateStr = null) => {
 // ==========================================================
 // 🚨 臨時看板の画像を作る魔法だちゅ！
 // ==========================================================
+// ==========================================================
+// 🚨 臨時看板の画像を作る魔法だちゅ！
+// ==========================================================
 const generateTempStickyImage = async (tempData) => {
     const fontBuffer = fs.readFileSync(path.join(__dirname, 'fonts', 'LINESeedJP-Regular.ttf'));
     
@@ -4467,9 +4454,10 @@ const generateTempStickyImage = async (tempData) => {
     const tType = tempData.template || 'alert_red';
     let markup = '';
 
+    // 💡 Satoriが読めない「box-sizing: border-box;」を全部消したちゅ！
     if (tType === 'elegant_gold') {
         markup = `
-        <div style="display: flex; flex-direction: column; justify-content: center; width: 600px; height: 180px; background-color: #1a1a1a; border: 6px solid #FFD700; border-radius: 15px; padding: 20px; box-sizing: border-box;">
+        <div style="display: flex; flex-direction: column; justify-content: center; width: 600px; height: 180px; background-color: #1a1a1a; border: 6px solid #FFD700; border-radius: 15px; padding: 20px;">
             <div style="display: flex; font-size: 26px; font-weight: bold; color: #FFD700; margin-bottom: 8px; border-bottom: 2px dashed #FFD700; padding-bottom: 5px;">
                 ${tempData.title}
             </div>
@@ -4479,7 +4467,7 @@ const generateTempStickyImage = async (tempData) => {
         </div>`;
     } else if (tType === 'ticket_green') {
         markup = `
-        <div style="display: flex; flex-direction: column; justify-content: center; width: 600px; height: 180px; background-color: #e8f5e9; border: 6px solid #2e7d32; border-radius: 15px; padding: 20px; box-sizing: border-box;">
+        <div style="display: flex; flex-direction: column; justify-content: center; width: 600px; height: 180px; background-color: #e8f5e9; border: 6px solid #2e7d32; border-radius: 15px; padding: 20px;">
             <div style="display: flex; font-size: 26px; font-weight: bold; color: #1b5e20; margin-bottom: 8px; border-bottom: 2px dashed #2e7d32; padding-bottom: 5px;">
                 ${tempData.title}
             </div>
@@ -4489,7 +4477,7 @@ const generateTempStickyImage = async (tempData) => {
         </div>`;
     } else if (tType === 'pop_pink') {
         markup = `
-        <div style="display: flex; flex-direction: column; justify-content: center; width: 600px; height: 180px; background-color: #fff0f5; border: 6px solid #ff6fa5; border-radius: 15px; padding: 20px; box-sizing: border-box;">
+        <div style="display: flex; flex-direction: column; justify-content: center; width: 600px; height: 180px; background-color: #fff0f5; border: 6px solid #ff6fa5; border-radius: 15px; padding: 20px;">
             <div style="display: flex; font-size: 26px; font-weight: bold; color: #ff1493; margin-bottom: 8px; border-bottom: 2px dashed #ff69b4; padding-bottom: 5px;">
                 ${tempData.title}
             </div>
@@ -4499,7 +4487,7 @@ const generateTempStickyImage = async (tempData) => {
         </div>`;
     } else if (tType === 'mystic_purple') {
         markup = `
-        <div style="display: flex; flex-direction: column; justify-content: center; width: 600px; height: 180px; background-color: #f5f0fa; border: 6px solid #ab8dd6; border-radius: 15px; padding: 20px; box-sizing: border-box;">
+        <div style="display: flex; flex-direction: column; justify-content: center; width: 600px; height: 180px; background-color: #f5f0fa; border: 6px solid #ab8dd6; border-radius: 15px; padding: 20px;">
             <div style="display: flex; font-size: 26px; font-weight: bold; color: #5a3c85; margin-bottom: 8px; border-bottom: 2px dashed #ab8dd6; padding-bottom: 5px;">
                 ${tempData.title}
             </div>
@@ -4509,7 +4497,7 @@ const generateTempStickyImage = async (tempData) => {
         </div>`;
     } else if (tType === 'aqua_blue') {
         markup = `
-        <div style="display: flex; flex-direction: column; justify-content: center; width: 600px; height: 180px; background-color: #f2fcff; border: 6px solid #ace9ff; border-radius: 15px; padding: 20px; box-sizing: border-box;">
+        <div style="display: flex; flex-direction: column; justify-content: center; width: 600px; height: 180px; background-color: #f2fcff; border: 6px solid #ace9ff; border-radius: 15px; padding: 20px;">
             <div style="display: flex; font-size: 26px; font-weight: bold; color: #25769c; margin-bottom: 8px; border-bottom: 2px dashed #84d2f0; padding-bottom: 5px;">
                 ${tempData.title}
             </div>
@@ -4520,7 +4508,7 @@ const generateTempStickyImage = async (tempData) => {
     } else {
         // 🚨 アラート（レッド）※デフォルト
         markup = `
-        <div style="display: flex; flex-direction: column; justify-content: center; width: 600px; height: 180px; background-color: #fff5f5; border: 6px solid #e53e3e; border-radius: 15px; padding: 20px; box-sizing: border-box;">
+        <div style="display: flex; flex-direction: column; justify-content: center; width: 600px; height: 180px; background-color: #fff5f5; border: 6px solid #e53e3e; border-radius: 15px; padding: 20px;">
             <div style="display: flex; font-size: 26px; font-weight: bold; color: #c53030; margin-bottom: 8px; border-bottom: 2px dashed #fc8181; padding-bottom: 5px;">
                 ${tempData.title}
             </div>
@@ -4550,7 +4538,6 @@ const generateTempStickyImage = async (tempData) => {
     const resvg = new Resvg(svg, { background: 'transparent', fitTo: { mode: 'original' } });
     return resvg.render().asPng();
 };
-
 // ==========================================================
 // 📦 画像たちをセットにして準備するまとめ役だちゅ！
 // ==========================================================

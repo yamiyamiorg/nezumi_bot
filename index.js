@@ -1499,8 +1499,24 @@ client.once('clientReady', async (c) => {
         },
         {
             name: 'temp_setup',
-            description: '【管理者用】臨時情報の看板（赤色ベース）を設定するちゅ！',
-            default_member_permissions: '8'
+            description: '【管理者用】臨時情報の看板を設定するちゅ！',
+            default_member_permissions: '8',
+            options: [
+                {
+                    name: 'template',
+                    type: 3, // 文字列
+                    description: '使いたいデザインテンプレートを選ぶちゅ！',
+                    required: true,
+                    choices: [
+                        { name: '🚨 アラート (レッド)', value: 'alert_red' },
+                        { name: '🟢 チケット風 (グリーン)', value: 'ticket_green' },
+                        { name: '🟡 エレガント (ブラック＆ゴールド)', value: 'elegant_gold' },
+                        { name: '🌸 ポップ (パステルピンク)', value: 'pop_pink' },
+                        { name: '🔮 ミスティック (パープル)', value: 'mystic_purple' },
+                        { name: '💧 アクア (ライトブルー)', value: 'aqua_blue' }
+                    ]
+                }
+            ]
         },
         {
             name: 'temp_remove',
@@ -1750,7 +1766,8 @@ client.on('interactionCreate', async (interaction) => {
                 try { 
                     if (interaction.isModalSubmit()) {
                         // 💡 【修正】臨時看板(modal_temp_setup)も「自分だけに見える」に仲間入りさせるちゅ！
-                        if (interaction.customId && (interaction.customId.startsWith('modal_event_') || interaction.customId === 'modal_temp_setup')) {
+                        // 💡 【修正】臨時看板(startsWith)も「自分だけに見える」に仲間入りさせるちゅ！
+                        if (interaction.customId && (interaction.customId.startsWith('modal_event_') || interaction.customId.startsWith('modal_temp_setup'))) {
                             await interaction.deferReply({ ephemeral: true });
                         } else {
                             // 他のゲームや天気のモーダルは設定を引き継ぐちゅ
@@ -4170,8 +4187,11 @@ client.on('interactionCreate', async (interaction) => {
     }
     // 💡 /temp_setup コマンド (臨時看板の入力画面を出す)
     else if (interaction.commandName === 'temp_setup') {
+        const templateType = interaction.options.getString('template') || 'alert_red'; // 💡 テンプレートを受け取る！
         const { ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
-        const modal = new ModalBuilder().setCustomId('modal_temp_setup').setTitle('🚨 臨時看板の設定');
+        
+        // 💡 IDにテンプレート名を含めて記憶させるちゅ！
+        const modal = new ModalBuilder().setCustomId(`modal_temp_setup_${templateType}`).setTitle('🚨 臨時看板の設定');
 
         const titleInput = new TextInputBuilder().setCustomId('title').setLabel('タイトル（例: 臨時メンテナンスのお知らせ）').setPlaceholder('例: 🚨 ボット停止のお知らせ').setStyle(TextInputStyle.Short).setRequired(true);
         const descInput = new TextInputBuilder().setCustomId('desc').setLabel('内容（改行もできるちゅ！）').setPlaceholder('例: 本日22時よりメンテナンスを行います。').setStyle(TextInputStyle.Paragraph).setRequired(true);
@@ -4197,13 +4217,18 @@ client.on('interactionCreate', async (interaction) => {
     }
     
     // 💡 臨時看板のモーダル送信を受け取って保存する
-    else if (interaction.isModalSubmit() && interaction.customId === 'modal_temp_setup') {
+    else if (interaction.isModalSubmit() && interaction.customId.startsWith('modal_temp_setup')) {
+        
+        // 💡 IDからテンプレート名を取り出すちゅ！
+        const parts = interaction.customId.split('_');
+        const templateType = parts.slice(3).join('_') || 'alert_red';
         
         const title = interaction.fields.getTextInputValue('title');
         const desc = interaction.fields.getTextInputValue('desc');
         
         const tempPath = path.join(__dirname, 'designs', 'temp_board.json');
-        fs.writeFileSync(tempPath, JSON.stringify({ title, desc }, null, 2));
+        // 💡 テンプレート名も一緒に保存するちゅ！
+        fs.writeFileSync(tempPath, JSON.stringify({ title, desc, template: templateType }, null, 2));
 
         await interaction.editReply('🚨 臨時看板をセットしたちゅ！次のメッセージから、日替わり看板の上に目立つように表示されるちゅよ！');
     }
@@ -4416,22 +4441,80 @@ const generateStickyImage = async (text, forcedDateStr = null) => {
 // ==========================================================
 // 🚨 臨時看板の画像を作る魔法だちゅ！
 // ==========================================================
+// ==========================================================
+// 🚨 臨時看板の画像を作る魔法だちゅ！
+// ==========================================================
 const generateTempStickyImage = async (tempData) => {
     const fontBuffer = fs.readFileSync(path.join(__dirname, 'fonts', 'LINESeedJP-Regular.ttf'));
     
     // 改行をHTMLで表示できるように変換するちゅ
     const descLines = tempData.desc.split('\n').map(line => `<div style="display: flex;">${line || '　'}</div>`).join('');
 
-    // 目立つ赤色ベースのデザインだちゅ！
-    const markup = `
-    <div style="display: flex; flex-direction: column; justify-content: center; width: 600px; height: 180px; background-color: #fff5f5; border: 6px solid #e53e3e; border-radius: 15px; padding: 20px; box-sizing: border-box;">
-        <div style="display: flex; font-size: 26px; font-weight: bold; color: #c53030; margin-bottom: 8px; border-bottom: 2px dashed #fc8181; padding-bottom: 5px;">
-            ${tempData.title}
-        </div>
-        <div style="display: flex; flex-direction: column; font-size: 18px; color: #2d3748; line-height: 1.5;">
-            ${descLines}
-        </div>
-    </div>`;
+    const tType = tempData.template || 'alert_red';
+    let markup = '';
+
+    if (tType === 'elegant_gold') {
+        markup = `
+        <div style="display: flex; flex-direction: column; justify-content: center; width: 600px; height: 180px; background-color: #1a1a1a; border: 6px solid #FFD700; border-radius: 15px; padding: 20px; box-sizing: border-box;">
+            <div style="display: flex; font-size: 26px; font-weight: bold; color: #FFD700; margin-bottom: 8px; border-bottom: 2px dashed #FFD700; padding-bottom: 5px;">
+                ${tempData.title}
+            </div>
+            <div style="display: flex; flex-direction: column; font-size: 18px; color: #e0e0e0; line-height: 1.5;">
+                ${descLines}
+            </div>
+        </div>`;
+    } else if (tType === 'ticket_green') {
+        markup = `
+        <div style="display: flex; flex-direction: column; justify-content: center; width: 600px; height: 180px; background-color: #e8f5e9; border: 6px solid #2e7d32; border-radius: 15px; padding: 20px; box-sizing: border-box;">
+            <div style="display: flex; font-size: 26px; font-weight: bold; color: #1b5e20; margin-bottom: 8px; border-bottom: 2px dashed #2e7d32; padding-bottom: 5px;">
+                ${tempData.title}
+            </div>
+            <div style="display: flex; flex-direction: column; font-size: 18px; color: #1b5e20; line-height: 1.5;">
+                ${descLines}
+            </div>
+        </div>`;
+    } else if (tType === 'pop_pink') {
+        markup = `
+        <div style="display: flex; flex-direction: column; justify-content: center; width: 600px; height: 180px; background-color: #fff0f5; border: 6px solid #ff6fa5; border-radius: 15px; padding: 20px; box-sizing: border-box;">
+            <div style="display: flex; font-size: 26px; font-weight: bold; color: #ff1493; margin-bottom: 8px; border-bottom: 2px dashed #ff69b4; padding-bottom: 5px;">
+                ${tempData.title}
+            </div>
+            <div style="display: flex; flex-direction: column; font-size: 18px; color: #c71585; line-height: 1.5;">
+                ${descLines}
+            </div>
+        </div>`;
+    } else if (tType === 'mystic_purple') {
+        markup = `
+        <div style="display: flex; flex-direction: column; justify-content: center; width: 600px; height: 180px; background-color: #f5f0fa; border: 6px solid #ab8dd6; border-radius: 15px; padding: 20px; box-sizing: border-box;">
+            <div style="display: flex; font-size: 26px; font-weight: bold; color: #5a3c85; margin-bottom: 8px; border-bottom: 2px dashed #ab8dd6; padding-bottom: 5px;">
+                ${tempData.title}
+            </div>
+            <div style="display: flex; flex-direction: column; font-size: 18px; color: #4b2b73; line-height: 1.5;">
+                ${descLines}
+            </div>
+        </div>`;
+    } else if (tType === 'aqua_blue') {
+        markup = `
+        <div style="display: flex; flex-direction: column; justify-content: center; width: 600px; height: 180px; background-color: #f2fcff; border: 6px solid #ace9ff; border-radius: 15px; padding: 20px; box-sizing: border-box;">
+            <div style="display: flex; font-size: 26px; font-weight: bold; color: #25769c; margin-bottom: 8px; border-bottom: 2px dashed #84d2f0; padding-bottom: 5px;">
+                ${tempData.title}
+            </div>
+            <div style="display: flex; flex-direction: column; font-size: 18px; color: #175d7e; line-height: 1.5;">
+                ${descLines}
+            </div>
+        </div>`;
+    } else {
+        // 🚨 アラート（レッド）※デフォルト
+        markup = `
+        <div style="display: flex; flex-direction: column; justify-content: center; width: 600px; height: 180px; background-color: #fff5f5; border: 6px solid #e53e3e; border-radius: 15px; padding: 20px; box-sizing: border-box;">
+            <div style="display: flex; font-size: 26px; font-weight: bold; color: #c53030; margin-bottom: 8px; border-bottom: 2px dashed #fc8181; padding-bottom: 5px;">
+                ${tempData.title}
+            </div>
+            <div style="display: flex; flex-direction: column; font-size: 18px; color: #2d3748; line-height: 1.5;">
+                ${descLines}
+            </div>
+        </div>`;
+    }
 
     const svg = await satori(html(markup), {
         width: 600,

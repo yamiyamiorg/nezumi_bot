@@ -200,8 +200,11 @@ const HOUSE_EMOJIS = {
     '👻': '1462474772863652051'
 };
 
+const ALLOWED_CATEGORY_IDS = ['1450709451488100396','1450712250514935960'];
+
 const houseDataPath = path.join(__dirname, 'house_points.json');
 let houseData = { points: {}, daily: {}, reactionAwarded: [] };
+
 
 if (fs.existsSync(houseDataPath)) {
     try { houseData = JSON.parse(fs.readFileSync(houseDataPath, 'utf8')); }
@@ -4517,7 +4520,8 @@ client.on('messageCreate', async (message) => {
     if (userHouse) {
         // 💡 A. デイリー活動ボーナス（1日1回の発言で10点！）
         const todayStr = getJSTInfo().dateStr; 
-        if (houseData.daily[message.author.id] !== todayStr) {
+        // 💡 【追加】指定したカテゴリの中での発言だった時だけ、ボーナスをあげるちゅ！
+        if (ALLOWED_CATEGORY_IDS.includes(message.channel.parentId) && houseData.daily[message.author.id] !== todayStr) {
             houseData.daily[message.author.id] = todayStr;
             houseData.points[userHouse.id] += 10;
             saveHouseData();
@@ -4628,7 +4632,6 @@ cron.schedule('0 0 * * *', async () => {
 // ==========================================================
 // 💡 ポイント付与を許可する「カテゴリのID」をここに登録します
 // 複数ある場合は ['ID1', 'ID2'] のようにカンマで区切って増やせます
-const ALLOWED_CATEGORY_IDS = ['1450709451488100396','1450712250514935960'];
 
 client.on('messageReactionAdd', async (reaction, user) => {
     if (user.bot) return;

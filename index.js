@@ -4626,12 +4626,21 @@ cron.schedule('0 0 * * *', async () => {
 // ==========================================================
 // 🏰 寮ポイント：B. リアクション連動ボーナス
 // ==========================================================
+// 💡 ポイント付与を許可する「カテゴリのID」をここに登録します
+// 複数ある場合は ['ID1', 'ID2'] のようにカンマで区切って増やせます
+const ALLOWED_CATEGORY_IDS = ['1450709451488100396','1450712250514935960'];
+
 client.on('messageReactionAdd', async (reaction, user) => {
     if (user.bot) return;
     
     // 昔のメッセージだった場合は中身を引っ張ってくるちゅ！
     if (reaction.partial) {
         try { await reaction.fetch(); } catch (error) { return; }
+    }
+
+    // 💡 追加：指定したカテゴリの中のチャンネルじゃなければ、ここで処理をストップする！
+    if (!ALLOWED_CATEGORY_IDS.includes(reaction.message.channel.parentId)) {
+        return;
     }
 
     const emojiName = reaction.emoji.name;
